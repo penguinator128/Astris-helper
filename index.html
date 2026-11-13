@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Astris Field Kit: pocket film-production helper. Lighting diagrams, shot design, calculators, sun and moon planner, colour tools, storyboards and slate." />
+    <meta name="theme-color" content="#FFC400" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Field Kit" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Astris Field Kit</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('afk-theme');
+          if (t !== 'dark' && t !== 'light') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #fafaf7;
+        color: #0b0b0c;
+        font-family: 'Inter Tight', system-ui, sans-serif;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        font-size: 12px;
+        font-weight: 600;
+        transition: opacity 200ms ease-out;
+        z-index: 999;
+      }
+      [data-theme='dark'] #splash {
+        background: #0b0b0c;
+        color: #f3f1ea;
+      }
+      #splash .mark {
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash" aria-hidden="true">
+      <div style="text-align: center">
+        <svg class="mark" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93 4.93 19.07" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+          <circle cx="12" cy="12" r="3" fill="#FFC400" stroke="currentColor" stroke-width="2" />
+        </svg>
+        Astris
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

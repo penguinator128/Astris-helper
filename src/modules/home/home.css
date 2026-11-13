@@ -1,0 +1,117 @@
+.home-head {
+  background: var(--yellow);
+  color: var(--ink);
+  border-bottom: 1px solid var(--yellow-deep);
+}
+.home-head__inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--s-5) var(--s-4) var(--s-4);
+  display: grid;
+  gap: var(--s-4);
+}
+@media (min-width: 900px) {
+  .home-head__inner {
+    padding: var(--s-6) var(--s-6) var(--s-5);
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+  .home-head__sun {
+    grid-column: 1 / -1;
+  }
+}
+.home-head__brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+.home-head__kit {
+  color: var(--ink);
+  opacity: 0.7;
+}
+.home-head__date {
+  display: flex;
+  gap: var(--s-3);
+  font-size: var(--fs-14);
+  align-items: baseline;
+}
+.muted-ink {
+  opacity: 0.7;
+}
+.home-head__sun {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid rgba(11, 11, 12, 0.25);
+}
+.home-head__sun .readout__label {
+  color: rgba(11, 11, 12, 0.7);
+}
+.home-head__sun .readout__value {
+  font-size: var(--fs-20);
+}
+@media (min-width: 480px) {
+  .home-head__sun .readout__value {
+    font-size: var(--fs-28);
+  }
+}
+.home-head__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-14);
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid var(--ink);
+  justify-self: start;
+}
+@media (min-width: 900px) {
+  .home-head__more {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+}
+
+.home-projects {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 1fr);
+  gap: var(--s-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.home-projects::-webkit-scrollbar {
+  display: none;
+}
+.home-project {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  text-align: left;
+  min-height: 72px;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.home-project:hover {
+  border-color: var(--hair-strong);
+  background: var(--bg-2);
+}
+.home-project.is-current {
+  border-color: var(--fg);
+  box-shadow: inset 3px 0 0 var(--yellow);
+}
+.home-project__name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-project__meta {
+  font-size: var(--fs-12);
+  color: var(--fg-3);
+}
