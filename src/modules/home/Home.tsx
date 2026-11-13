@@ -5,7 +5,7 @@ import { TOOLS } from '@/app/nav';
 import { Wordmark } from '@/brand/Wordmark';
 import { useSettings } from '@/store/settings';
 import { useProjects } from '@/store/projects';
-import { dayTimes } from '@/lib/sun';
+import { dayTimes, tzOffsetMinutes } from '@/lib/sun';
 import { fmtDate, fmtTime } from '@/lib/format';
 import { Button, LinkButton } from '@/components/Button';
 import './home.css';
@@ -18,7 +18,7 @@ export default function Home() {
     .slice(0, 4);
 
   const today = useMemo(() => new Date(), []);
-  const times = useMemo(() => dayTimes(today, location.lat, location.lng), [today, location.lat, location.lng]);
+  const times = useMemo(() => dayTimes(today, location.lat, location.lng, tzOffsetMinutes(today, timezone)), [today, location.lat, location.lng, timezone]);
   const t = (d: Date) => fmtTime(d, timeFormat, timezone);
 
   return (

@@ -127,3 +127,15 @@ export function compass(bearing: number): string {
 export function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
+
+/** Parse shutter text like "1/50", "1/50 s", "0.5", "2s", "30\"" into seconds. */
+export function parseShutter(text: string): number {
+  const t = text.trim().toLowerCase().replace(/s$/, '').replace(/"$/, '').trim();
+  const frac = t.match(/^1\s*\/\s*([0-9.]+)$/);
+  if (frac) {
+    const d = parseFloat(frac[1]);
+    return d > 0 ? 1 / d : NaN;
+  }
+  const n = parseFloat(t);
+  return Number.isFinite(n) && n > 0 ? n : NaN;
+}

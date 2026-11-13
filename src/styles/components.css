@@ -545,7 +545,12 @@ input[type='radio'] {
   word-break: break-word;
 }
 .readout__value--lg {
-  font-size: var(--fs-44);
+  font-size: var(--fs-28);
+}
+@media (min-width: 480px) {
+  .readout__value--lg {
+    font-size: var(--fs-44);
+  }
 }
 .readout__value--sm {
   font-size: var(--fs-20);
@@ -804,6 +809,17 @@ input[type='radio'] {
   border-bottom: 1px solid var(--hair);
   vertical-align: middle;
   white-space: nowrap;
+}
+.table--sticky th:first-child,
+.table--sticky td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+.table--sticky th:first-child {
+  background: var(--bg-2);
+  z-index: 3;
 }
 .table th {
   font-family: var(--font-mono);
