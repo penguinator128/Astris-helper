@@ -309,7 +309,7 @@ input[type='radio'] {
 }
 .stepper__input {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 48px;
   text-align: center;
   border: 0;
   border-left: 1px solid var(--hair);
