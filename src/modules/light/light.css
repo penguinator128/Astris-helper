@@ -1,0 +1,124 @@
+.diagram-host {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--hair-strong);
+  background: var(--canvas);
+  overflow: hidden;
+}
+@media (min-width: 900px) {
+  .diagram-host {
+    height: 560px;
+  }
+}
+.diagram-wrap {
+  position: relative;
+}
+.diagram-toolbar {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  z-index: 2;
+}
+.diagram-toolbar .btn {
+  background: var(--bg);
+}
+.live-view {
+  width: 100%;
+  height: 260px;
+  background: #0b0b0c;
+  border: 1px solid var(--hair-strong);
+  overflow: hidden;
+  position: relative;
+}
+@media (min-width: 900px) {
+  .live-view {
+    height: 320px;
+  }
+}
+.live-view--off {
+  display: grid;
+  place-items: center;
+  padding: var(--s-4);
+  background: var(--bg-2);
+}
+.light-list {
+  display: flex;
+  flex-direction: column;
+}
+.light-list__item {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 40px;
+  padding: 0 var(--s-2);
+  border-bottom: 1px solid var(--hair);
+  font-size: var(--fs-14);
+  text-align: left;
+}
+.light-list__item[aria-pressed='true'] {
+  background: var(--accent-wash);
+}
+.light-list__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--hair-strong);
+}
+.contrib {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--s-2) var(--s-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.contrib__bar {
+  height: 6px;
+  background: var(--yellow);
+  border-radius: 1px;
+  align-self: center;
+  min-width: 2px;
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s-2);
+}
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--s-3);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  text-align: left;
+  min-height: 84px;
+}
+.preset-card:hover {
+  border-color: var(--fg);
+  background: var(--bg-2);
+}
+.preset-card strong {
+  font-weight: 500;
+}
+.preset-card span {
+  font-size: var(--fs-12);
+  color: var(--fg-2);
+}
+.diagram-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--s-3);
+}
+.diagram-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--bg-2);
+  border: 1px solid var(--hair);
+  display: block;
+}
