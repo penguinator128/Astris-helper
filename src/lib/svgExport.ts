@@ -1,5 +1,15 @@
-/** Rasterise an inline SVG element to a PNG data URL at the given pixel width. */
-export async function svgToPng(svg: SVGSVGElement, width: number, height: number, background = '#ffffff'): Promise<string> {
+import { svgFontCss } from './fontData';
+
+interface Options {
+  /** Fill colour behind the SVG; null keeps transparency. */
+  background?: string | null;
+  /** Embed the brand fonts so text renders in Inter Tight and IBM Plex Mono. */
+  embedFonts?: boolean;
+}
+
+/** Rasterise an inline SVG element to a PNG data URL at the given pixel size. */
+export async function svgToPng(svg: SVGSVGElement, width: number, height: number, opts: Options = {}): Promise<string> {
+  const { background = '#ffffff', embedFonts = false } = opts;
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   clone.setAttribute('width', String(width));
@@ -13,14 +23,22 @@ export async function svgToPng(svg: SVGSVGElement, width: number, height: number
       if (v && v.includes('var(')) el.setAttribute(attr, resolve(v));
     }
   });
+  if (embedFonts) {
+    const css = await svgFontCss();
+    if (css) {
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.textContent = css;
+      clone.insertBefore(style, clone.firstChild);
+    }
+  }
   const xml = new XMLSerializer().serializeToString(clone);
   const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   try {
     const img = new Image();
     img.decoding = 'async';
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
+    await new Promise<void>((resolveLoad, reject) => {
+      img.onload = () => resolveLoad();
       img.onerror = () => reject(new Error('SVG render failed'));
       img.src = url;
     });
@@ -28,8 +46,10 @@ export async function svgToPng(svg: SVGSVGElement, width: number, height: number
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, width, height);
+    if (background) {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, width, height);
+    }
     ctx.drawImage(img, 0, 0, width, height);
     return canvas.toDataURL('image/png');
   } finally {

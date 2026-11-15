@@ -197,7 +197,7 @@ function CardsView({ ceremony }: { ceremony: Ceremony }) {
   async function exportCard(key: string, filename: string) {
     const svg = refs.current.get(key);
     if (!svg) return;
-    const png = await svgToPng(svg, 1200, 1680);
+    const png = await svgToPng(svg, 1200, 1680, { embedFonts: true });
     downloadDataUrl(png, filename);
   }
   async function exportAll() {

@@ -196,6 +196,8 @@ function ExtractTab() {
               type="file"
               accept="image/*"
               className="visually-hidden"
+              tabIndex={-1}
+              aria-hidden="true"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) {

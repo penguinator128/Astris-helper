@@ -10,7 +10,7 @@ import { Check, SelectField, TextAreaField, TextField } from '@/components/Field
 import { Readout } from '@/components/Readout';
 import { Tabs } from '@/components/Tabs';
 import { useProject, useProjects } from '@/store/projects';
-import { getImageUrl, storeImage, removeImage, getImageBlob, blobToDataUrl } from '@/store/images';
+import { getImageUrl, storeImage, getImageBlob, blobToDataUrl } from '@/store/images';
 import { toast } from '@/store/toast';
 import { uid } from '@/lib/id';
 import { ASPECTS, CAMERA_ANGLES, CAMERA_MOVES, aspectRatio, type Composition, type FrameElement, type SilhouetteKind } from '@/types/project';
@@ -184,7 +184,6 @@ function Editor({ initial }: { initial: Composition }) {
     const file = await pickFile('image/*');
     if (!file) return;
     const imgId = await storeImage(file);
-    if (comp.backgroundImageId) void removeImage(comp.backgroundImageId);
     update({ backgroundImageId: imgId });
   }
 
@@ -204,7 +203,7 @@ function Editor({ initial }: { initial: Composition }) {
     }
     // Hide selection chrome in the export
     clone.querySelectorAll('[data-chrome]').forEach((n) => n.remove());
-    const png = await svgToPng(clone, W, H, '#FAFAF7');
+    const png = await svgToPng(clone, W, H, { background: '#FAFAF7', embedFonts: true });
     downloadDataUrl(png, `${safeFilename(project.name)}-${safeFilename(comp.name)}.png`);
     toast('PNG exported');
   }
@@ -473,8 +472,7 @@ function Editor({ initial }: { initial: Composition }) {
                         variant="ghost"
                         icon={<X size={14} />}
                         onClick={() => {
-                          if (comp.backgroundImageId) void removeImage(comp.backgroundImageId);
-                          update({ backgroundImageId: undefined });
+                                                update({ backgroundImageId: undefined });
                         }}
                       >
                         Remove

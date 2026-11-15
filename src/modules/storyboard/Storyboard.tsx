@@ -12,7 +12,7 @@ import { Sheet } from '@/components/Sheet';
 import { SelectField, TextAreaField, TextField } from '@/components/Field';
 import { Stepper } from '@/components/Stepper';
 import { useProject, useProjects } from '@/store/projects';
-import { storeImage, removeImage, getImageUrl } from '@/store/images';
+import { storeImage, getImageUrl } from '@/store/images';
 import { pickFile } from '@/lib/download';
 import { uid } from '@/lib/id';
 import { toast } from '@/store/toast';
@@ -55,8 +55,6 @@ export default function Storyboard() {
     patch((p) => ({ storyboard: p.storyboard.map((x) => (x.id === f.id ? f : x)) }));
   }
   function remove(id: string) {
-    const f = frames.find((x) => x.id === id);
-    if (f?.imageId) void removeImage(f.imageId);
     commit(frames.filter((x) => x.id !== id));
     setEditing(null);
     toast('Frame removed');
@@ -214,7 +212,6 @@ function FrameEditor({ frame, aspect, onChange, onClose, onRemove }: { frame: St
     const file = await pickFile('image/*');
     if (!file) return;
     const imageId = await storeImage(file);
-    if (frame.imageId) void removeImage(frame.imageId);
     set({ source: 'image', imageId });
   }
 
