@@ -18,6 +18,7 @@ import { cameraConfig, derive, normalise, shutterSeconds, warnings } from '@/lib
 import { TEMPLATES, blankGear, gearFromTemplate, nextName, categoryInfo, type GearTemplate } from '@/lib/gear/catalog';
 import { check, checkProduction, portUsage, rigKey } from '@/lib/gear/autoconnect';
 import { defaultLight } from '@/modules/light/presets';
+import { envOf, presetEnv } from '@/lib/light/environment';
 import { AutoConnectSheet } from '@/modules/gear/AutoConnectSheet';
 import type { CameraConfig, Connection, DiagramObject, GearCategory, GearItem, LightingDiagram } from '@/types/project';
 import '@/modules/gear/gear.css';
@@ -45,11 +46,12 @@ function previewScene(): DiagramObject[] {
 }
 
 const PREVIEW_SCENE = previewScene();
+const PREVIEW_ENV = presetEnv('white-studio');
 
 function findPlaced(diagrams: LightingDiagram[], camId: string) {
   for (const dg of diagrams) {
     const o = dg.objects.find((x) => x.type === 'camera' && 'gearId' in x && x.gearId === camId);
-    if (o) return { objects: dg.objects, id: o.id, name: dg.name, diagramId: dg.id };
+    if (o) return { objects: dg.objects, id: o.id, name: dg.name, diagramId: dg.id, environment: envOf(dg) };
   }
   return null;
 }
@@ -259,7 +261,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
         <Blueprint tone="ink" padding="none" title={`Camera ${letter(index)} · simulated image`} aside={<span className="tag tag--wash">Simulated</span>}>
           <div className="cam-view">
             <Suspense fallback={<div className="live-view" />}>
-              <LiveView objects={scene} mode={live} verticalFovDeg={d.vfov} cameraObjectId={placed?.id ?? 'pv-cam'} config={config} />
+              <LiveView objects={scene} mode={live} verticalFovDeg={d.vfov} cameraObjectId={placed?.id ?? 'pv-cam'} config={config} environment={placed?.environment ?? PREVIEW_ENV} />
             </Suspense>
             <div className="cam-view__hud mono" aria-hidden>
               <span>{config.focalLength} mm · f/{config.aperture}</span>
@@ -275,7 +277,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
           {placed ? (
             <Link className="btn btn--sm btn--quiet" to={`/plan/${placed.diagramId}`}>On plan: {placed.name} <ArrowRight size={14} /></Link>
           ) : (
-            <span className="micro">Not on a plan yet: showing a three-light preview set.</span>
+            <span className="micro">Not on a plan yet: showing a three-light preview in a white studio.</span>
           )}
         </div>
         <p className="muted sim-note">

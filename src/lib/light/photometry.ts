@@ -1,4 +1,5 @@
-import type { DiagramLight, DiagramObject, DiagramSubject, LightKind } from '@/types/project';
+import type { DiagramLight, DiagramObject, DiagramSubject, Environment, LightKind } from '@/types/project';
+import { ambientRel, effectiveLight, roomBounceRel } from './environment';
 import { kelvinToMired, miredToKelvin } from '@/lib/calc/light';
 
 /** Relative output of each source at 100% power, 1 m, on axis. Sun and window ignore distance. */
@@ -99,7 +100,7 @@ export function illuminanceAt(light: DiagramLight, point: { x: number; y: number
   if (light.kind === 'sun') beam = 1;
   else if (angle > half) beam = Math.max(0.1, 1 - (angle - half) / Math.max(1, half * 0.5));
   base.onAxis = angle <= half;
-  const output = (light.power / 100) * KIND_OUTPUT[light.kind];
+  const output = (light.power / 100) * KIND_OUTPUT[light.kind] * effectiveLight(light).output;
   let e = light.kind === 'sun' || light.kind === 'window' ? output * beam * (light.kind === 'window' ? Math.min(1, 1.5 / dist) : 1) : (output * beam) / (dist * dist);
   // Flags and diffusion between the light and the point
   for (const o of objects) {
@@ -128,7 +129,7 @@ export function faceFactor(subjectRotation: number, subject: { x: number; y: num
   return cos > 0 ? 0.3 + 0.7 * cos : Math.max(0.06, 0.3 + 0.6 * cos);
 }
 
-export function evaluate(objects: DiagramObject[]): Photometry {
+export function evaluate(objects: DiagramObject[], env?: Environment): Photometry {
   const subject = findSubject(objects);
   const point = subject ? { x: subject.x, y: subject.y, z: Math.min(subject.height, SUBJECT_EYE_HEIGHT) } : { x: 0, y: 0, z: SUBJECT_EYE_HEIGHT };
   const lights = objects.filter((o): o is DiagramLight => o.type === 'light');
@@ -151,6 +152,21 @@ export function evaluate(objects: DiagramObject[]): Photometry {
     const reflected = ((onCard * 0.6 * Math.min(1.5, card.size)) / (d * d)) * (subject ? faceFactor(subject.rotation, subject, card) : 1);
     if (reflected > 1e-4) {
       contributions.push({ id: card.id, label: card.label, kind: 'bounce', illuminance: reflected, kelvin: card.kelvin, gel: card.gel, distance: d, onAxis: true });
+    }
+  }
+
+  // The room and location: ambient light, light bounced off the walls, and the sun.
+  if (env) {
+    const amb = ambientRel(env);
+    if (amb > 0) contributions.push({ id: 'env-ambient', label: env.outdoor ? 'Sky' : 'Ambient light', kind: 'window', illuminance: amb * 0.7, kelvin: env.ambientKelvin, gel: '', distance: 0, onAxis: true });
+    const bounce = roomBounceRel(env, lights, (l) => EMITTING.includes(l.kind));
+    if (bounce > 1e-4) contributions.push({ id: 'env-bounce', label: env.outdoor ? 'Ground bounce' : 'Room bounce', kind: 'bounce', illuminance: bounce * 0.7, kelvin: contributions[0]?.kelvin ?? 5600, gel: '', distance: 0, onAxis: true });
+    if (env.sun && !lights.some((l) => l.kind === 'sun')) {
+      const el = (Math.max(0, env.sunElevation) * Math.PI) / 180;
+      const az = (env.sunAzimuth * Math.PI) / 180;
+      const e = 100 * Math.sin(el) * (subject ? faceFactor(subject.rotation, subject, { x: point.x + Math.sin(az), y: point.y + Math.cos(az) }) : 1);
+      rawKey = Math.max(rawKey, 100 * Math.sin(el));
+      contributions.push({ id: 'env-sun', label: 'Sun', kind: 'sun', illuminance: e, kelvin: 5600, gel: '', distance: 0, onAxis: true });
     }
   }
 

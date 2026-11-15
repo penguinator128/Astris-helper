@@ -122,3 +122,8 @@
   border: 1px solid var(--hair);
   display: block;
 }
+.env-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}

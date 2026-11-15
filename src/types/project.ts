@@ -194,6 +194,35 @@ export interface DiagramLight extends DiagramObjectBase {
   tilt: number; // degrees, down is negative
   gel: string; // hex or ''
   spread: number; // beam angle degrees
+  /** What the fixture is; changes its output and how soft it is. Missing on older plans (an open LED). */
+  fixture?: LightFixture;
+  diffusion?: Diffusion;
+}
+
+export type LightFixture = 'led-mono' | 'fresnel' | 'softbox' | 'lantern' | 'led-panel' | 'rgb-panel' | 'tube' | 'practical-bulb' | 'open-face';
+export type Diffusion = 'none' | 'light' | 'medium' | 'heavy';
+
+export type EnvPreset = 'white-studio' | 'dark-studio' | 'daylight' | 'overcast' | 'natural-indoor' | 'warm-indoor' | 'low-light' | 'custom';
+
+/** The room or location around the set: walls, floor, ambient light. */
+export interface Environment {
+  preset: EnvPreset;
+  outdoor: boolean;
+  wallColour: string;
+  floorColour: string;
+  /** Share of light the walls reflect, 0 to 1. White paint is about 0.85. */
+  wallReflect: number;
+  material: 'matte' | 'satin' | 'gloss';
+  /** Back wall distance behind the subject, metres. */
+  wallDistance: number;
+  roomWidth: number;
+  ceilingHeight: number;
+  /** Light already in the space before your lights, lux. */
+  ambientLux: number;
+  ambientKelvin: number;
+  sun: boolean;
+  sunAzimuth: number; // degrees, 0 = top of the plan
+  sunElevation: number;
 }
 
 /** Any other piece of kit placed on the plan: mics, recorders, wireless, monitors, grip, power. */
@@ -404,6 +433,9 @@ export interface LightingDiagram {
   notes: string;
   updatedAt: number;
   thumbnail?: string; // data URL png, small
+  environment?: Environment;
+  sceneNumber?: string;
+  cameraNotes?: string;
 }
 
 /* ---------- Composition ---------- */

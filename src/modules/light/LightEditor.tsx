@@ -13,6 +13,8 @@ import { Sheet } from '@/components/Sheet';
 import { Expander, Formula } from '@/components/Expander';
 import { useProject, useProjects } from '@/store/projects';
 import { useSettings } from '@/store/settings';
+import { envOf, FIXTURES, DIFFUSION, fixtureInfo } from '@/lib/light/environment';
+import { EnvironmentPanel } from './EnvironmentPanel';
 import { cameraConfig } from '@/lib/camera/settings';
 import { toast } from '@/store/toast';
 import { uid } from '@/lib/id';
@@ -61,7 +63,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   const desktop = useMedia('(min-width: 900px)');
   const history = useHistory<DiagramObject[]>(initial.objects);
   const objects = history.present;
-  const [meta, setMeta] = useState({ name: initial.name, notes: initial.notes, showSunPath: initial.showSunPath, gridSize: initial.gridSize });
+  const [meta, setMeta] = useState({ name: initial.name, notes: initial.notes, showSunPath: initial.showSunPath, gridSize: initial.gridSize, environment: envOf(initial), sceneNumber: initial.sceneNumber ?? '', cameraNotes: initial.cameraNotes ?? '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snap, setSnap] = useState(true);
   const [fitKey, setFitKey] = useState(1);
@@ -81,7 +83,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
 
   const sensor = getSensor(project.camera.sensorId, project.camera.customSensor);
   const fov = fieldOfView(project.camera.focalLength, sensor.width, sensor.height);
-  const photometry = useMemo(() => evaluate(objects), [objects]);
+  const photometry = useMemo(() => evaluate(objects, meta.environment), [objects, meta.environment]);
   const links = useMemo(() => planLinks(objects, project.gear, project.connections), [objects, project.gear, project.connections]);
   const placedGear = new Set(objects.map((o) => ('gearId' in o ? o.gearId : undefined)).filter(Boolean) as string[]);
   const selected = objects.find((o) => o.id === selectedId) ?? null;
@@ -422,7 +424,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
             </div>
             {showLive && (
               <Suspense fallback={<div className="live-view live-view--off">Loading 3D view…</div>}>
-                <LiveView objects={objects} mode={liveMode} verticalFovDeg={fov.vertical} cameraObjectId={lookCam?.id} config={lookConfig} />
+                <LiveView objects={objects} mode={liveMode} verticalFovDeg={fov.vertical} cameraObjectId={lookCam?.id} config={lookConfig} environment={meta.environment} />
               </Suspense>
             )}
           </div>
@@ -543,10 +545,13 @@ function Editor({ initial }: { initial: LightingDiagram }) {
               <Blueprint title="Set-up" index="G">
                 <div className="stack">
                   <TextField label="Name" value={meta.name} onChange={(v) => setMeta({ ...meta, name: v })} />
+                  <TextField label="Scene number" value={meta.sceneNumber} onChange={(v) => setMeta({ ...meta, sceneNumber: v })} placeholder="e.g. 12A" />
                   <TextAreaField label="Notes" value={meta.notes} onChange={(v) => setMeta({ ...meta, notes: v })} rows={3} placeholder="Power, stands, gels, what each light is doing." />
+                  <TextAreaField label="Camera notes" value={meta.cameraNotes} onChange={(v) => setMeta({ ...meta, cameraNotes: v })} rows={2} placeholder="Lens choices, moves, coverage order." />
                   <SelectField label="Grid" value={String(meta.gridSize)} onChange={(v) => setMeta({ ...meta, gridSize: Number(v) })} options={[{ value: '0.5', label: '0.5 m' }, { value: '1', label: '1 m' }, { value: '2', label: '2 m' }]} />
                 </div>
               </Blueprint>
+              <EnvironmentPanel env={meta.environment} onChange={(environment) => setMeta({ ...meta, environment })} />
               <Blueprint title="Sun path" index="F">
                 <div className="stack">
                   <Check label="Show sun path for exteriors (north is up)" checked={meta.showSunPath} onChange={(v) => setMeta({ ...meta, showSunPath: v })} />
@@ -798,6 +803,21 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
         <TextField label="Label" value={l.label} onChange={(v) => onChange(l.id, { label: v }, 'label')} />
         <SelectField label="Type" value={l.kind} onChange={(v) => onChange(l.id, { kind: v as LightKind })} options={LIGHT_KINDS.map((k) => ({ value: k.id, label: k.label }))} />
         {emits && <GearLink obj={l} ctx={ctx} category="light" onChange={onChange} />}
+        {emits && l.kind !== 'sun' && l.kind !== 'window' && (
+          <>
+            <SelectField
+              label="Fixture"
+              value={l.fixture ?? 'led-mono'}
+              onChange={(v) => {
+                const f = fixtureInfo(v as DiagramLight['fixture'])!;
+                onChange(l.id, { fixture: f.id, size: f.size, spread: Math.min(180, f.spread) } as Partial<DiagramLight>);
+              }}
+              options={FIXTURES.map((f) => ({ value: f.id, label: f.label }))}
+              hint={fixtureInfo(l.fixture ?? 'led-mono')?.note}
+            />
+            <SelectField label="Diffusion" value={l.diffusion ?? 'none'} onChange={(v) => onChange(l.id, { diffusion: v } as Partial<DiagramLight>)} options={DIFFUSION.map((d) => ({ value: d.id, label: d.label }))} hint="Softer and larger, but each step costs output." />
+          </>
+        )}
         {emits && (
           <>
             <Slider label="Power" value={l.power} onChange={(v) => onChange(l.id, { power: v }, 'power')} min={0} max={100} unit="%" />
@@ -828,6 +848,23 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
         <Slider label={emits ? 'Source size (softness)' : 'Width'} value={Math.round(l.size * 100) / 100} onChange={(v) => onChange(l.id, { size: v }, 'size')} min={0.1} max={3} step={0.05} decimals={2} unit="m" />
         <Slider label="Height" value={Math.round(l.height * 100) / 100} onChange={(v) => onChange(l.id, { height: v }, 'height')} min={0} max={l.kind === 'sun' ? 30 : 5} step={0.05} decimals={2} unit="m" />
         {emits && <Slider label="Tilt (down is negative)" value={l.tilt} onChange={(v) => onChange(l.id, { tilt: v }, 'tilt')} min={-90} max={45} unit="°" />}
+        {dist != null && emits && l.kind !== 'sun' && (
+          <Stepper
+            label="Distance to subject"
+            unit="m"
+            value={Math.round(dist * 100) / 100}
+            min={0.3}
+            max={30}
+            step={0.1}
+            decimals={2}
+            onChange={(v) => {
+              const s = objects.find((o) => o.type === 'subject')!;
+              const k = v / Math.max(0.01, dist);
+              onChange(l.id, { x: s.x + (l.x - s.x) * k, y: s.y + (l.y - s.y) * k }, 'dist');
+            }}
+            hint="Moves the light along its line to the subject. Halving the distance gives four times the light (two stops)."
+          />
+        )}
         {dist != null && (
           <p className="tiny muted">
             {unit.fmt(dist, 2)} from the subject on the floor plan, {unit.fmt(Math.hypot(dist, l.height - 1.5), 2)} to the face.

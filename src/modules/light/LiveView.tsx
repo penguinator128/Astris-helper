@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { CameraConfig, DiagramObject, DiagramLight } from '@/types/project';
+import type { CameraConfig, DiagramObject, DiagramLight, Environment } from '@/types/project';
+import { effectiveLight, envOf, ambientRel, roomBounceRel } from '@/lib/light/environment';
 import { applyGrade, gradeMaterial } from './grade';
 import { derive } from '@/lib/camera/settings';
 import { EMITTING, evaluate, findSubject, illuminanceAt } from '@/lib/light/photometry';
@@ -14,6 +15,8 @@ interface Props {
   /** Which camera on the plan to look through, and its settings. With settings, the view becomes a simulated camera image. */
   cameraObjectId?: string;
   config?: CameraConfig;
+  /** The room or location; plans without one keep the dark studio look. */
+  environment?: Environment;
   className?: string;
 }
 
@@ -60,7 +63,7 @@ function buildMannequin(): THREE.Group {
   return g;
 }
 
-export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId, config, className = '' }: Props) {
+export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId, config, environment, className = '' }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sizeRef = useRef({ w: 800, h: 450 });
   const [sizeTick, setSizeTick] = useState(0);
@@ -102,14 +105,6 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b0b0c);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 1 }));
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(30, 10), new THREE.MeshStandardMaterial({ color: 0x2c2c30, roughness: 1 }));
-    back.position.set(0, 5, -6);
-    back.receiveShadow = true;
-    scene.add(back);
     scene.add(new THREE.AmbientLight(0xffffff, 0.035));
 
     const mannequin = buildMannequin();
@@ -214,8 +209,10 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
     mannequin.scale.setScalar(subjectHeight / 1.7);
     const target = toThree(sx, sy, 1.45);
 
-    const photometry = evaluate(objects);
+    const env = envOf({ environment });
+    const photometry = evaluate(objects, env);
     const lights = objects.filter((o): o is DiagramLight => o.type === 'light');
+    buildRoom(lightGroup, scene, env, objects, sx, sy, lights);
     const cardMat = (colour: number, opacity = 1) => new THREE.MeshStandardMaterial({ color: colour, roughness: 1, side: THREE.DoubleSide, transparent: opacity < 1, opacity });
 
     for (const l of lights) {
@@ -248,17 +245,18 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
         const offAxis = THREE.MathUtils.radToDeg(facing.angleTo(toSubject));
         spot.target.position.copy(offAxis <= l.spread / 2 ? target : aimPoint);
         // Penumbra from source size; widen the outer cone so the stated spread is roughly the half-power edge.
-        spot.penumbra = THREE.MathUtils.clamp(0.1 + l.size * 0.25, 0.1, 0.5);
+        const eff = effectiveLight(l);
+        spot.penumbra = THREE.MathUtils.clamp(0.1 + eff.size * 0.3, 0.1, 0.9);
         spot.angle = THREE.MathUtils.degToRad(Math.min(88, Math.max(5, (l.spread / 2) * (1 + spot.penumbra))));
         spot.decay = 2;
         spot.distance = 0;
         // Physically based units: candela. A 100% key at 2 m should read as a normal exposure.
         const kindGain = l.kind === 'window' ? 2.5 : l.kind === 'practical' ? 0.35 : 1;
-        spot.intensity = (l.power / 100) * 18 * kindGain;
+        spot.intensity = (l.power / 100) * 18 * kindGain * eff.output;
         spot.castShadow = true;
         spot.shadow.mapSize.set(1024, 1024);
         spot.shadow.bias = -0.0008;
-        spot.shadow.radius = 2 + l.size * 6;
+        spot.shadow.radius = 2 + eff.size * 8;
         lightGroup.add(spot, spot.target);
         // Visible fixture
         const fixture = new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.8, Math.max(0.12, l.size)), Math.min(0.7, Math.max(0.12, l.size * 0.9)), 0.05), new THREE.MeshStandardMaterial({ color: 0x202024, emissive: colour, emissiveIntensity: 0.3, roughness: 0.6 }));
@@ -297,10 +295,12 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
       }
     }
     // Auto exposure from the photometry so a 100% key at 2 m looks correctly exposed.
-    st.renderer.toneMappingExposure = THREE.MathUtils.clamp(0.95 / Math.sqrt(Math.max(0.06, photometry.rawKey) / 0.25), 0.4, 1.8);
+    // Gentle below studio levels so dim set-ups still look dim; full correction above, for daylight.
+    const k = Math.max(0.06, photometry.rawKey, photometry.total) / 0.25;
+    st.renderer.toneMappingExposure = THREE.MathUtils.clamp(0.95 / Math.sqrt(Math.min(k, 4)) / Math.max(1, k / 4), 0.0005, 1.8);
     scene.updateMatrixWorld(true);
     st.render();
-  }, [objects]);
+  }, [objects, environment]);
 
   // Everything else on the plan: extra talent, cameras, mics, recorders, monitors, walls, marks and areas.
   useEffect(() => {
@@ -496,4 +496,69 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
     );
   }
   return <div ref={hostRef} className={`live-view ${className}`} role="img" aria-label={mode === 'camera' ? 'Live preview from the camera position' : 'Live preview, orbit view'} />;
+}
+
+const ROUGH = { matte: 1, satin: 0.6, gloss: 0.25 };
+const hex = (c: string) => new THREE.Color(c);
+const kColour = (k: number) => {
+  const [r, g, b] = kelvinToRgb(k);
+  return new THREE.Color(r / 255, g / 255, b / 255);
+};
+
+/** Floor, walls, sky and the ambient and bounced light of the environment. Added to the group that rebuilds with the lights. */
+function buildRoom(group: THREE.Group, scene: THREE.Scene, env: Environment, objects: DiagramObject[], sx: number, sy: number, lights: DiagramLight[]) {
+  const rough = ROUGH[env.material];
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(env.outdoor ? 200 : env.roomWidth * 2.5, env.outdoor ? 200 : env.roomWidth * 2.5), new THREE.MeshStandardMaterial({ color: hex(env.floorColour), roughness: env.outdoor ? 1 : Math.max(0.35, rough) }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(sx, 0, -sy);
+  floor.receiveShadow = true;
+  group.add(floor);
+  if (env.outdoor) {
+    scene.background = kColour(env.ambientKelvin).lerp(new THREE.Color(0x9fb8d6), env.sun ? 0.6 : 0.2).multiplyScalar(env.sun ? 0.9 : 0.75);
+  } else {
+    scene.background = new THREE.Color(0x0b0b0c);
+    // Walls around the subject: one behind (seen from the camera), two at the sides, one behind the camera.
+    const cam = objects.find((o) => o.type === 'camera');
+    const ang = cam ? Math.atan2(sx - cam.x, sy - cam.y) : 0;
+    const fwd = { x: Math.sin(ang), y: Math.cos(ang) };
+    const side = { x: fwd.y, y: -fwd.x };
+    const camDist = cam ? Math.hypot(sx - cam.x, sy - cam.y) : 3;
+    const depth = env.wallDistance + camDist + 1.5;
+    const mat = new THREE.MeshStandardMaterial({ color: hex(env.wallColour), roughness: rough, side: THREE.DoubleSide });
+    const wall = (cx: number, cy: number, faceX: number, faceY: number, w: number) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, env.ceilingHeight), mat);
+      m.position.set(cx, env.ceilingHeight / 2, -cy);
+      m.lookAt(cx + faceX, env.ceilingHeight / 2, -(cy + faceY));
+      m.receiveShadow = true;
+      group.add(m);
+    };
+    const back = { x: sx + fwd.x * env.wallDistance, y: sy + fwd.y * env.wallDistance };
+    wall(back.x, back.y, -fwd.x, -fwd.y, env.roomWidth);
+    const midX = back.x - (fwd.x * depth) / 2;
+    const midY = back.y - (fwd.y * depth) / 2;
+    const hw = env.roomWidth / 2;
+    wall(midX + side.x * hw, midY + side.y * hw, -side.x, -side.y, depth);
+    wall(midX - side.x * hw, midY - side.y * hw, side.x, side.y, depth);
+  }
+  // Ambient plus light bounced off the room, in the same units as the lamps (18 per relative unit).
+  const bounce = roomBounceRel(env, lights, (l) => EMITTING.includes(l.kind));
+  const amb = ambientRel(env);
+  if (amb + bounce > 0) {
+    const sky = env.outdoor ? kColour(env.ambientKelvin) : kColour(env.ambientKelvin).lerp(hex(env.wallColour), bounce / (amb + bounce + 1e-6));
+    const ground = hex(env.floorColour).multiplyScalar(0.6);
+    group.add(new THREE.HemisphereLight(sky, ground, (amb + bounce) * 18));
+  }
+  if (env.sun && !lights.some((l) => l.kind === 'sun')) {
+    const az = THREE.MathUtils.degToRad(env.sunAzimuth);
+    const el = THREE.MathUtils.degToRad(Math.max(2, env.sunElevation));
+    const sun = new THREE.DirectionalLight(kColour(5600), 100 * Math.sin(el) * 18);
+    const tgt = new THREE.Vector3(sx, 1, -sy);
+    sun.position.copy(tgt).add(new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).multiplyScalar(10));
+    sun.target.position.copy(tgt);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5 });
+    sun.shadow.bias = -0.0005;
+    group.add(sun, sun.target);
+  }
 }
