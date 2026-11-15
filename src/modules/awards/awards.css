@@ -1,0 +1,213 @@
+.award-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s-3);
+}
+.award-card-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--hair);
+}
+.nominee-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr auto;
+  gap: var(--s-2);
+  align-items: end;
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--hair);
+}
+@media (max-width: 600px) {
+  .nominee-row {
+    grid-template-columns: 44px 1fr auto;
+  }
+  .nominee-row > :nth-child(3) {
+    grid-column: 2 / span 2;
+  }
+}
+.winner-toggle {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--r-2);
+  color: var(--fg-3);
+}
+.winner-toggle[aria-pressed='true'] {
+  background: var(--yellow);
+  border-color: var(--yellow);
+  color: var(--ink);
+}
+
+/* ---------- Reveal ---------- */
+.reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--ink);
+  color: #f3f1ea;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-5);
+  padding: var(--s-5) var(--s-4);
+  overflow: hidden;
+}
+.reveal__category {
+  font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--yellow);
+  text-align: center;
+}
+.reveal__stage {
+  position: relative;
+  width: min(86vw, 520px);
+  aspect-ratio: 1.6;
+  perspective: 1200px;
+  /* Reserve the space the card rises into so it never covers the category line. */
+  margin-top: calc(min(86vw, 520px) / 1.6 * 0.52);
+}
+.reveal__head {
+  position: relative;
+  z-index: 1;
+}
+.envelope {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+}
+.envelope__back,
+.envelope__front {
+  position: absolute;
+  inset: 0;
+  background: #e9e3d0;
+  border: 1px solid #b9b5a8;
+}
+.envelope__front {
+  clip-path: polygon(0 0, 50% 52%, 100% 0, 100% 100%, 0 100%);
+  background: #f1ebd8;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8%;
+}
+.envelope__seal {
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  position: absolute;
+  left: 39%;
+  top: 34%;
+  z-index: 5;
+  transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 300ms;
+}
+.envelope__flap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 56%;
+  background: #e2dbc4;
+  border: 1px solid #b9b5a8;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform-origin: top center;
+  z-index: 4;
+  transition: transform 520ms cubic-bezier(0.2, 0, 0, 1);
+}
+.envelope__card {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 8%;
+  bottom: 8%;
+  background: var(--yellow);
+  color: var(--ink);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6%;
+  text-align: center;
+  transition: transform 700ms cubic-bezier(0.2, 0, 0, 1) 380ms;
+  border: 1px solid var(--yellow-deep);
+}
+.envelope__card .micro {
+  color: rgba(11, 11, 12, 0.7);
+}
+.envelope__winner {
+  font-size: clamp(24px, 6vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.envelope__work {
+  font-size: var(--fs-14);
+}
+.reveal.is-open .envelope__flap {
+  transform: rotateX(180deg);
+  z-index: 1;
+}
+.reveal.is-open .envelope__seal {
+  transform: scale(0.4);
+  opacity: 0;
+}
+.reveal.is-open .envelope__card {
+  transform: translateY(-62%);
+  z-index: 6;
+}
+.reveal__actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.reveal__actions .btn {
+  color: #f3f1ea;
+  border-color: #3d3d40;
+  background: transparent;
+}
+.reveal__actions .btn--primary {
+  color: var(--ink);
+  background: var(--yellow);
+  border-color: var(--yellow);
+}
+.reveal__rays {
+  position: absolute;
+  inset: -50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 196, 0, 0.07) 0deg 6deg, transparent 6deg 18deg);
+  opacity: 0;
+  transition: opacity 600ms ease-out 700ms;
+  pointer-events: none;
+}
+.reveal.is-open .reveal__rays {
+  opacity: 1;
+  animation: rays 24s linear infinite;
+}
+@keyframes rays {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal.is-open .reveal__rays {
+    animation: none;
+  }
+  .envelope__flap,
+  .envelope__card,
+  .envelope__seal {
+    transition-duration: 1ms;
+    transition-delay: 0ms;
+  }
+}
