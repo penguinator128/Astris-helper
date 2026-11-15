@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
-import { ArrowLeft, Copy, Download, Link2, Lock, LockOpen, Maximize2, Minus, Plus, Redo2, Trash2, Undo2, Magnet, Crosshair, Sun } from 'lucide-react';
+import { ArrowLeft, Cable, Copy, Download, Link2, Lock, LockOpen, Maximize2, Minus, Pencil, Plus, Redo2, Trash2, Undo2, Magnet, Crosshair, Sun } from 'lucide-react';
 import { Blueprint } from '@/components/Blueprint';
 import { Button } from '@/components/Button';
 import { Segmented } from '@/components/Segmented';
@@ -24,7 +24,10 @@ import { evaluate, ratioLabel, EMITTING } from '@/lib/light/photometry';
 import { dayTimes, sunPosition, tzOffsetMinutes, zonedDate } from '@/lib/sun';
 import { fmtNum, pad2, todayIso } from '@/lib/format';
 import { downloadDataUrl, safeFilename } from '@/lib/download';
-import { LIGHT_KINDS, type DiagramLight, type DiagramObject, type LightingDiagram, type LightKind } from '@/types/project';
+import { LIGHT_KINDS, ZONE_KINDS, type Connection, type DiagramLight, type DiagramObject, type GearCategory, type GearItem, type LightingDiagram, type LightKind, type ZoneKind } from '@/types/project';
+import { CATEGORIES, PLAN_VIEWS, TEMPLATES, categoryInfo, gearFromTemplate, inView, layerOf, nextName, planLinks, type GearTemplate, type PlanView } from '@/lib/gear/catalog';
+import { ConnectSheet } from '@/modules/gear/ConnectSheet';
+import { GearEditor } from '@/modules/gear/GearPage';
 import { DiagramCanvas } from './DiagramCanvas';
 import { useHistory } from './useHistory';
 import { PRESETS, defaultLight } from './presets';
@@ -43,7 +46,7 @@ export default function LightEditor() {
   const { id } = useParams();
   const project = useProject();
   const existing = project.diagrams.find((d) => d.id === id);
-  if (!existing) return <Navigate to="/light" replace />;
+  if (!existing) return <Navigate to="/plan" replace />;
   return <Editor key={existing.id} initial={existing} />;
 }
 
@@ -66,6 +69,9 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   const [attachOpen, setAttachOpen] = useState(false);
   const [showLive, setShowLive] = useState(true);
   const [liveMode, setLiveMode] = useState<'camera' | 'orbit'>('camera');
+  const [view, setView] = useState<PlanView>('all');
+  const [connectFrom, setConnectFrom] = useState<string | null>(null);
+  const [editGear, setEditGear] = useState<string | null>(null);
   const [sunDate, setSunDate] = useState(todayIso());
   const [sunTime, setSunTime] = useState(() => {
     const d = new Date();
@@ -75,6 +81,8 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   const sensor = getSensor(project.camera.sensorId, project.camera.customSensor);
   const fov = fieldOfView(project.camera.focalLength, sensor.width, sensor.height);
   const photometry = useMemo(() => evaluate(objects), [objects]);
+  const links = useMemo(() => planLinks(objects, project.gear, project.connections), [objects, project.gear, project.connections]);
+  const placedGear = new Set(objects.map((o) => ('gearId' in o ? o.gearId : undefined)).filter(Boolean) as string[]);
   const selected = objects.find((o) => o.id === selectedId) ?? null;
 
   /* ---------- persistence ---------- */
@@ -158,6 +166,58 @@ function Editor({ initial }: { initial: LightingDiagram }) {
     setSelectedId(s.id);
     setPanel('selected');
   }
+  const RING: Partial<Record<GearCategory, number>> = { camera: 3.2, mic: 1.3, wireless: 0.9, recorder: 3.6, 'audio-acc': 3.8, monitor: 4.2, light: 2.3, grip: 2.2, power: 5.5, media: 5.5, other: 4.5, lens: 3.2 };
+  function spot(category: GearCategory | 'zone' | 'talent' | 'mark'): { x: number; y: number; rotation: number } {
+    const subj = objects.find((o) => o.type === 'subject');
+    const sx = subj?.x ?? 0;
+    const sy = subj?.y ?? 0;
+    const r = category === 'zone' ? 7 : category === 'talent' ? 1.2 : category === 'mark' ? 0.8 : RING[category] ?? 3;
+    const n = objects.length;
+    const angle = (((category === 'camera' ? 180 : category === 'mic' ? 150 : 200) + n * 47) % 360) * (Math.PI / 180);
+    const x = Math.round((sx + Math.sin(angle) * r) * 4) / 4;
+    const y = Math.round((sy + Math.cos(angle) * r) * 4) / 4;
+    return { x, y, rotation: aimDeg(x, y, sx, sy) };
+  }
+  function place(obj: DiagramObject) {
+    commitObjects([...objects, obj]);
+    setFitKey((k) => k + 1);
+    setSelectedId(obj.id);
+    setPanel('selected');
+    if (!desktop) setSheet(true);
+  }
+  function placeGear(g: GearItem) {
+    const at = spot(g.category);
+    // A camera without gear (the one every new set-up starts with) takes the gear instead of adding a second camera.
+    const spare = g.category === 'camera' ? objects.find((o) => o.type === 'camera' && !o.gearId) : undefined;
+    if (spare) {
+      commitObjects(objects.map((o) => (o.id === spare.id ? { ...o, gearId: g.id, label: g.name } : o)));
+      setSelectedId(spare.id);
+      setPanel('selected');
+      return;
+    }
+    if (g.category === 'camera') place({ id: uid(), type: 'camera', gearId: g.id, ...at, locked: false, label: g.name });
+    else if (g.category === 'light') place(defaultLight('key', at.x, at.y, { gearId: g.id, label: g.name, rotation: at.rotation }));
+    else place({ id: uid(), type: 'gear', category: g.category, gearId: g.id, ...at, locked: false, label: g.name });
+  }
+  function addTemplate(t: GearTemplate) {
+    const g = gearFromTemplate(t, nextName(project.gear, t.category, t.name));
+    patch((p) => ({ gear: [...p.gear, g] }));
+    placeGear(g);
+  }
+  function addZone(kind: ZoneKind) {
+    const at = spot('zone');
+    const label = ZONE_KINDS.find((z) => z.id === kind)?.label ?? 'Area';
+    place({ id: uid(), type: 'zone', zoneKind: kind, x: at.x, y: at.y, rotation: 0, w: kind === 'base' ? 4 : 3, h: kind === 'base' ? 3 : 2, locked: false, label });
+  }
+  function addMark() {
+    const at = spot('mark');
+    place({ id: uid(), type: 'mark', x: at.x, y: at.y, rotation: 0, locked: false, label: `Mark ${objects.filter((o) => o.type === 'mark').length + 1}` });
+  }
+  function addTalent() {
+    const at = spot('talent');
+    place({ id: uid(), type: 'subject', subjectKind: 'person', height: 1.7, x: at.x, y: at.y, rotation: 180, locked: false, label: `Talent ${objects.filter((o) => o.type === 'subject').length + 1}` });
+  }
+
   function removeSelected() {
     if (!selected) return;
     commitObjects(objects.filter((o) => o.id !== selected.id));
@@ -234,24 +294,33 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   }
 
   function exportPng() {
-    const png = renderDiagramPng(objects, 1600, 1200, fov.horizontal, 'light', 1);
-    downloadDataUrl(png, `${safeFilename(project.name)}-${safeFilename(meta.name)}.png`);
+    const png = renderDiagramPng(objects, 1600, 1200, fov.horizontal, 'light', 1, view, links);
+    downloadDataUrl(png, `${safeFilename(project.name)}-${safeFilename(meta.name)}-${view}.png`);
     toast('PNG exported');
   }
 
-  const propsPanel = selected ? <ObjectProps obj={selected} objects={objects} onChange={updateObj} onAim={() => aimAtSubject(selected)} onDelete={removeSelected} onDuplicate={duplicateSelected} unit={u} /> : <p className="small muted">Tap an object on the canvas to edit it.</p>;
+  const gearCtx: GearCtx = { gear: project.gear, connections: project.connections, onConnect: setConnectFrom, onEditGear: setEditGear };
+  const propsPanel = selected ? <ObjectProps obj={selected} objects={objects} onChange={updateObj} onAim={() => aimAtSubject(selected)} onDelete={removeSelected} onDuplicate={duplicateSelected} unit={u} ctx={gearCtx} /> : <p className="small muted">Tap something on the plan to edit it.</p>;
+  const unplaced = project.gear.filter((g) => !placedGear.has(g.id) && g.category !== 'lens' && (view === 'all' || categoryInfo(g.category).layer === view));
+  const templateButtons = (cats: GearCategory[]) =>
+    TEMPLATES.filter((t) => cats.includes(t.category)).map((t) => (
+      <Button key={t.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => addTemplate(t)}>
+        {t.name}
+      </Button>
+    ));
+  const showLayer = (l: PlanView) => view === 'all' || view === l;
 
   return (
     <main className="page page--wide" ref={hostRef} onKeyDown={onKeyDown}>
       <div className="page__head page__head--editor">
         <div className="cluster" style={{ flexWrap: 'nowrap', minWidth: 0 }}>
-          <Link to="/light" className="btn btn--ghost btn--sm btn--icon" aria-label="All diagrams">
+          <Link to="/plan" className="btn btn--ghost btn--sm btn--icon" aria-label="All set-ups">
             <ArrowLeft size={18} />
           </Link>
           <div style={{ minWidth: 0 }}>
-            <span className="page__idx">02 · Light</span>
+            <span className="page__idx">01 · Shoot plan</span>
             <h1 className="visually-hidden">{meta.name}</h1>
-            <input className="input" aria-label="Diagram name" value={meta.name} onChange={(e) => setMeta({ ...meta, name: e.target.value })} style={{ fontWeight: 600, fontSize: 'var(--fs-20)', border: 0, padding: 0, minHeight: 32, background: 'transparent' }} />
+            <input className="input" aria-label="Set-up name" value={meta.name} onChange={(e) => setMeta({ ...meta, name: e.target.value })} style={{ fontWeight: 600, fontSize: 'var(--fs-20)', border: 0, padding: 0, minHeight: 32, background: 'transparent' }} />
           </div>
         </div>
         <div className="page__actions">
@@ -266,8 +335,20 @@ function Editor({ initial }: { initial: LightingDiagram }) {
 
       <div className="tool tool--canvas">
         <div className="stack">
+          <Segmented
+            value={view}
+            onChange={(v) => {
+              setView(v);
+              if (selected && !inView(selected, v)) setSelectedId(null);
+            }}
+            options={PLAN_VIEWS.map((v) => ({ value: v.id, label: v.label }))}
+            block
+            label="Plan view"
+          />
           <div className="diagram-wrap">
             <DiagramCanvas
+              planView={view}
+              links={links}
               objects={objects}
               selectedId={selectedId}
               onSelect={(id) => {
@@ -302,6 +383,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
             </div>
           </div>
 
+          {(view === 'all' || view === 'lighting') && (
           <Blueprint tone="yellow" aria-live="polite" aria-label="Lighting readouts">
             <div className="readout-grid">
               <Readout label="Key to fill" value={ratioLabel(photometry.ratio)} size="sm" sub={Number.isFinite(photometry.ratioStops) ? `${fmtNum(photometry.ratioStops, 1)} stops` : 'add fill or a bounce'} />
@@ -310,6 +392,8 @@ function Editor({ initial }: { initial: LightingDiagram }) {
               <Readout label="Camera lens" value={`${project.camera.focalLength} mm · ${fmtNum(fov.horizontal, 0)}°`} size="sm" sub={sensor.name} />
             </div>
           </Blueprint>
+          )}
+          {view !== 'all' && view !== 'lighting' && <ViewSummary view={view} objects={objects} gear={project.gear} connections={project.connections} onSelect={(id) => { setSelectedId(id); setPanel('selected'); if (!desktop) setSheet(true); }} />}
 
           <div className="stack stack--sm">
             <div className="cluster" style={{ justifyContent: 'space-between' }}>
@@ -346,55 +430,111 @@ function Editor({ initial }: { initial: LightingDiagram }) {
             tabs={[
               { id: 'add', label: 'Add' },
               { id: 'selected', label: 'Selected' },
-              { id: 'scene', label: 'Scene' },
+              { id: 'scene', label: 'Set-up' },
               { id: 'readouts', label: 'Lights' },
             ]}
           />
           {panel === 'add' && (
             <div className="stack">
-              <Blueprint title="Lights" index="A">
-                <div className="cluster">
-                  {LIGHT_KINDS.filter((k) => k.emits).map((k) => (
-                    <Button key={k.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => addLight(k.id)}>
-                      {k.label}
-                    </Button>
-                  ))}
-                </div>
-              </Blueprint>
-              <Blueprint title="Modifiers and set" index="B">
-                <div className="cluster">
-                  {LIGHT_KINDS.filter((k) => !k.emits).map((k) => (
-                    <Button key={k.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => addLight(k.id)}>
-                      {k.label}
-                    </Button>
-                  ))}
-                  <Button size="sm" variant="quiet" icon={<Plus size={14} />} onClick={addWall}>
-                    Wall
-                  </Button>
-                  <Button size="sm" variant="quiet" icon={<Plus size={14} />} onClick={addSubject}>
-                    Object
-                  </Button>
-                </div>
-              </Blueprint>
-              <Blueprint title="Presets" index="C">
-                <div className="stack stack--sm">
-                  <p className="tiny muted">Replaces the current layout. Undo brings it back.</p>
-                  <div className="preset-grid">
-                    {PRESETS.map((p) => (
-                      <button key={p.id} type="button" className="preset-card" onClick={() => loadPreset(p.id)}>
-                        <strong>{p.name}</strong>
-                        <span>{p.note}</span>
-                      </button>
+              {unplaced.length > 0 && (
+                <Blueprint title="From your gear" index="★">
+                  <div className="cluster">
+                    {unplaced.map((g) => (
+                      <Button key={g.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => placeGear(g)}>
+                        {g.name}
+                      </Button>
                     ))}
                   </div>
-                </div>
-              </Blueprint>
+                </Blueprint>
+              )}
+              {showLayer('camera') && (
+                <Blueprint title="Camera" index="A">
+                  <div className="cluster">
+                    {templateButtons(['camera', 'monitor'])}
+                    <Button size="sm" variant="quiet" icon={<Plus size={14} />} onClick={addTalent}>
+                      Talent
+                    </Button>
+                    <Button size="sm" variant="quiet" icon={<Plus size={14} />} onClick={addMark}>
+                      Mark
+                    </Button>
+                  </div>
+                </Blueprint>
+              )}
+              {showLayer('lighting') && (
+                <>
+                  <Blueprint title="Lights" index="B">
+                    <div className="stack stack--sm">
+                      <div className="cluster">
+                        {LIGHT_KINDS.filter((k) => k.emits).map((k) => (
+                          <Button key={k.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => addLight(k.id)}>
+                            {k.label}
+                          </Button>
+                        ))}
+                      </div>
+                      <span className="micro">As gear (goes on the gear list)</span>
+                      <div className="cluster">{templateButtons(['light'])}</div>
+                    </div>
+                  </Blueprint>
+                  <Blueprint title="Modifiers and grip" index="C">
+                    <div className="cluster">
+                      {LIGHT_KINDS.filter((k) => !k.emits).map((k) => (
+                        <Button key={k.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => addLight(k.id)}>
+                          {k.label}
+                        </Button>
+                      ))}
+                      {templateButtons(['grip'])}
+                    </div>
+                  </Blueprint>
+                </>
+              )}
+              {showLayer('audio') && (
+                <Blueprint title="Audio" index="D">
+                  <div className="cluster">{templateButtons(['mic', 'wireless', 'recorder', 'audio-acc'])}</div>
+                </Blueprint>
+              )}
+              {showLayer('base') && (
+                <Blueprint title="Base and set" index="E">
+                  <div className="stack stack--sm">
+                    <div className="cluster">
+                      {ZONE_KINDS.map((z) => (
+                        <Button key={z.id} size="sm" variant={z.id === 'base' ? 'default' : 'quiet'} icon={<Plus size={14} />} onClick={() => addZone(z.id)}>
+                          {z.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="cluster">
+                      {templateButtons(['power', 'media'])}
+                      <Button size="sm" variant="quiet" icon={<Plus size={14} />} onClick={addWall}>
+                        Wall
+                      </Button>
+                      <Button size="sm" variant="quiet" icon={<Plus size={14} />} onClick={addSubject}>
+                        Object
+                      </Button>
+                    </div>
+                  </div>
+                </Blueprint>
+              )}
+              {showLayer('lighting') && (
+                <Blueprint title="Lighting presets" index="F">
+                  <div className="stack stack--sm">
+                    <p className="tiny muted">Replaces the current layout. Undo brings it back.</p>
+                    <div className="preset-grid">
+                      {PRESETS.map((p) => (
+                        <button key={p.id} type="button" className="preset-card" onClick={() => loadPreset(p.id)}>
+                          <strong>{p.name}</strong>
+                          <span>{p.note}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </Blueprint>
+              )}
             </div>
           )}
           {panel === 'selected' && <Blueprint title={selected ? selected.label : 'Nothing selected'} index="D">{propsPanel}</Blueprint>}
           {panel === 'scene' && (
             <div className="stack">
-              <Blueprint title="Diagram" index="E">
+              <Blueprint title="Set-up" index="G">
                 <div className="stack">
                   <TextField label="Name" value={meta.name} onChange={(v) => setMeta({ ...meta, name: v })} />
                   <TextAreaField label="Notes" value={meta.notes} onChange={(v) => setMeta({ ...meta, notes: v })} rows={3} placeholder="Power, stands, gels, what each light is doing." />
@@ -528,13 +668,94 @@ mix kelvin = 1e6 / Σ(E × mired) / ΣE`}</Formula>
           </div>
         )}
       </Sheet>
+      <ConnectSheet key={connectFrom ?? 'none'} open={connectFrom != null} onClose={() => setConnectFrom(null)} fromGear={connectFrom && project.gear.find((g) => g.id === connectFrom)?.ports.some((p) => p.dir === 'out') ? connectFrom : undefined} toGear={connectFrom && !project.gear.find((g) => g.id === connectFrom)?.ports.some((p) => p.dir === 'out') ? connectFrom : undefined} />
+      {editGear && <GearEditor id={editGear} onClose={() => setEditGear(null)} />}
     </main>
   );
 }
 
 /* ---------- property editors ---------- */
 
-function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, unit }: { obj: DiagramObject; objects: DiagramObject[]; onChange: (id: string, d: Partial<DiagramObject>, key?: string) => void; onAim: () => void; onDelete: () => void; onDuplicate: () => void; unit: ReturnType<typeof useUnits> }) {
+type GearCtx = { gear: GearItem[]; connections: Connection[]; onConnect: (gearId: string) => void; onEditGear: (gearId: string) => void };
+
+function GearLink({ obj, ctx, category, onChange }: { obj: DiagramObject & { gearId?: string }; ctx: GearCtx; category: GearCategory; onChange: (id: string, d: Partial<DiagramObject>, key?: string) => void }) {
+  const options = ctx.gear.filter((g) => g.category === category);
+  const g = ctx.gear.find((x) => x.id === obj.gearId);
+  const name = (id: string) => ctx.gear.find((x) => x.id === id)?.name ?? '';
+  const conns = g ? ctx.connections.filter((c) => c.fromGear === g.id || c.toGear === g.id) : [];
+  return (
+    <div className="stack stack--sm">
+      <SelectField
+        label="Gear"
+        value={obj.gearId ?? ''}
+        onChange={(v) => onChange(obj.id, v ? { gearId: v, label: ctx.gear.find((x) => x.id === v)?.name ?? obj.label } : { gearId: undefined })}
+        options={[{ value: '', label: 'Not assigned' }, ...options.map((o) => ({ value: o.id, label: o.name }))]}
+        hint={options.length ? undefined : `No ${categoryInfo(category).label.toLowerCase()} on your gear list yet.`}
+      />
+      {g && (
+        <>
+          <p className="tiny muted">
+            {g.model && g.model !== g.name ? `${g.model} · ` : ''}
+            {g.ports.filter((p) => p.dir === 'in').length} in · {g.ports.filter((p) => p.dir === 'out').length} out{g.power ? ` · ${g.power}` : ''}
+          </p>
+          {conns.map((c) => (
+            <div key={c.id} className="tiny mono">
+              {c.fromGear === g.id ? `Out to ${name(c.toGear)}` : `In from ${name(c.fromGear)}`}
+            </div>
+          ))}
+          <div className="cluster">
+            <Button size="sm" variant="quiet" icon={<Cable size={14} />} onClick={() => ctx.onConnect(g.id)}>
+              Connect
+            </Button>
+            <Button size="sm" variant="quiet" icon={<Pencil size={14} />} onClick={() => ctx.onEditGear(g.id)}>
+              Edit gear
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function codeFor(o: DiagramObject): string {
+  if (o.type === 'camera') return 'CAM';
+  if (o.type === 'light') return 'LGT';
+  if (o.type === 'gear') return categoryInfo(o.category).code;
+  if (o.type === 'zone') return 'AREA';
+  return '';
+}
+
+function ViewSummary({ view, objects, gear, connections, onSelect }: { view: PlanView; objects: DiagramObject[]; gear: GearItem[]; connections: Connection[]; onSelect: (id: string) => void }) {
+  const items = objects.filter((o) => layerOf(o) === view);
+  const label = PLAN_VIEWS.find((v) => v.id === view)?.label ?? '';
+  const hint: Record<string, string> = { camera: 'cameras, monitors, talent and marks', audio: 'mics, wireless and recorders', base: 'home base, power and other areas' };
+  return (
+    <Blueprint title={`${label} on this set-up`} index={String(items.length)}>
+      {items.length === 0 ? (
+        <p className="small muted">Nothing here yet. Use Add to place {hint[view] ?? 'items'}.</p>
+      ) : (
+        <div className="rows">
+          {items.map((o) => {
+            const g = 'gearId' in o ? gear.find((x) => x.id === o.gearId) : undefined;
+            const n = g ? connections.filter((c) => c.fromGear === g.id || c.toGear === g.id).length : 0;
+            return (
+              <button key={o.id} type="button" className="row" style={{ gridTemplateColumns: '48px 1fr auto', width: '100%', textAlign: 'left' }} onClick={() => onSelect(o.id)}>
+                <span className="row__idx mono">{codeFor(o)}</span>
+                <span className="row__main">
+                  <span className="row__title small">{o.label}</span>
+                  <span className="row__sub tiny">{o.type === 'zone' ? `${o.w} × ${o.h} m` : g ? g.model || g.name : 'No gear assigned'}</span>
+                </span>
+                {o.type !== 'zone' && <span className={`tag ${n ? 'tag--wash' : ''}`}>{n} link{n === 1 ? '' : 's'}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Blueprint>
+  );
+}
+
+function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, unit, ctx }: { obj: DiagramObject; objects: DiagramObject[]; onChange: (id: string, d: Partial<DiagramObject>, key?: string) => void; onAim: () => void; onDelete: () => void; onDuplicate: () => void; unit: ReturnType<typeof useUnits>; ctx: GearCtx }) {
   const subject = objects.find((o) => o.type === 'subject');
   const dist = subject ? Math.hypot(obj.x - subject.x, obj.y - subject.y) : null;
   const common = (
@@ -570,6 +791,7 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
       <div className="stack">
         <TextField label="Label" value={l.label} onChange={(v) => onChange(l.id, { label: v }, 'label')} />
         <SelectField label="Type" value={l.kind} onChange={(v) => onChange(l.id, { kind: v as LightKind })} options={LIGHT_KINDS.map((k) => ({ value: k.id, label: k.label }))} />
+        {emits && <GearLink obj={l} ctx={ctx} category="light" onChange={onChange} />}
         {emits && (
           <>
             <Slider label="Power" value={l.power} onChange={(v) => onChange(l.id, { power: v }, 'power')} min={0} max={100} unit="%" />
@@ -629,6 +851,37 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
       </div>
     );
   }
+  if (obj.type === 'gear') {
+    return (
+      <div className="stack">
+        <TextField label="Label" value={obj.label} onChange={(v) => onChange(obj.id, { label: v }, 'label')} />
+        <SelectField label="Kind" value={obj.category} onChange={(v) => onChange(obj.id, { category: v as GearCategory })} options={CATEGORIES.filter((c) => c.id !== 'camera' && c.id !== 'light').map((c) => ({ value: c.id, label: c.label }))} />
+        <GearLink obj={obj} ctx={ctx} category={obj.category} onChange={onChange} />
+        {common}
+      </div>
+    );
+  }
+  if (obj.type === 'zone') {
+    return (
+      <div className="stack">
+        <TextField label="Label" value={obj.label} onChange={(v) => onChange(obj.id, { label: v }, 'label')} />
+        <SelectField label="Area" value={obj.zoneKind} onChange={(v) => onChange(obj.id, { zoneKind: v as ZoneKind })} options={ZONE_KINDS.map((z) => ({ value: z.id, label: z.label }))} />
+        <div className="grid-2">
+          <Stepper label="Width" unit="m" value={obj.w} onChange={(v) => onChange(obj.id, { w: Math.max(0.5, v) }, 'w')} min={0.5} max={60} step={0.5} decimals={1} />
+          <Stepper label="Depth" unit="m" value={obj.h} onChange={(v) => onChange(obj.id, { h: Math.max(0.5, v) }, 'h')} min={0.5} max={60} step={0.5} decimals={1} />
+        </div>
+        {common}
+      </div>
+    );
+  }
+  if (obj.type === 'mark') {
+    return (
+      <div className="stack">
+        <TextField label="Label" value={obj.label} onChange={(v) => onChange(obj.id, { label: v }, 'label')} hint="Who or what stands here, e.g. Mara 1." />
+        {common}
+      </div>
+    );
+  }
   if (obj.type === 'wall') {
     return (
       <div className="stack">
@@ -641,6 +894,7 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
   return (
     <div className="stack">
       <TextField label="Label" value={obj.label} onChange={(v) => onChange(obj.id, { label: v }, 'label')} />
+      {obj.type === 'camera' && <GearLink obj={obj} ctx={ctx} category="camera" onChange={onChange} />}
       <p className="tiny muted">The field-of-view cone follows the project camera and lens.</p>
       {common}
       <div className="cluster">

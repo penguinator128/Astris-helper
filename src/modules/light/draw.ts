@@ -1,4 +1,5 @@
-import type { DiagramObject, DiagramLight, DiagramCamera } from '@/types/project';
+import type { DiagramObject, DiagramLight, DiagramCamera, DiagramGear, DiagramZone, DiagramMark, SignalKind } from '@/types/project';
+import { categoryInfo, inView, type PlanView } from '@/lib/gear/catalog';
 import { kelvinToHex } from '@/lib/colour/kelvin';
 import { EMITTING } from '@/lib/light/photometry';
 import { dirFromRotation } from '@/lib/light/photometry';
@@ -20,7 +21,25 @@ export interface DrawOptions {
   theme: 'light' | 'dark';
   sunPath?: { azimuths: { az: number; label: string; alt: number }[]; nowAz: number | null; nowAlt: number } | null;
   showHandles?: boolean;
+  planView?: PlanView;
+  links?: PlanLink[];
 }
+
+/** A connection drawn between two placed objects. */
+export interface PlanLink {
+  from: string;
+  to: string;
+  signal: SignalKind;
+  wireless: boolean;
+}
+
+const LINK_STYLE: Record<SignalKind, { colour: string; dash: number[] }> = {
+  audio: { colour: '#3f6fa0', dash: [6, 4] },
+  video: { colour: '#e0ab00', dash: [] },
+  timecode: { colour: '#7a7a7c', dash: [2, 3] },
+  power: { colour: '#b3261e', dash: [2, 4] },
+  data: { colour: '#7a7a7c', dash: [8, 3] },
+};
 
 export const HANDLE_DIST = 42; // px from object centre to the rotate handle
 
@@ -35,6 +54,9 @@ export function objectRadiusPx(o: DiagramObject, scale: number): number {
   if (o.type === 'subject') return Math.max(14, 0.35 * scale);
   if (o.type === 'camera') return Math.max(14, 0.3 * scale);
   if (o.type === 'wall') return Math.max(10, (o.length * scale) / 2);
+  if (o.type === 'gear') return 14;
+  if (o.type === 'mark') return 10;
+  if (o.type === 'zone') return (Math.hypot(o.w, o.h) * scale) / 2;
   const l = o as DiagramLight;
   return Math.max(14, Math.min(60, (Math.max(0.5, l.size) * scale) / 2 + 6));
 }
@@ -157,12 +179,26 @@ export function draw(ctx: CanvasRenderingContext2D, o: DrawOptions) {
     ctx.restore();
   }
 
-  // Draw order: walls, light beams, lights, camera, subject
-  for (const obj of objects) if (obj.type === 'wall') drawWall(ctx, obj, view, ink, selectedId === obj.id);
-  for (const obj of objects) if (obj.type === 'light') drawBeam(ctx, obj, view, dark);
-  for (const obj of objects) if (obj.type === 'camera') drawCamera(ctx, obj, view, ink, o.cameraFovDeg, selectedId === obj.id, dark);
-  for (const obj of objects) if (obj.type === 'light') drawLight(ctx, obj, view, ink, label, selectedId === obj.id, dark);
-  for (const obj of objects) if (obj.type === 'subject') drawSubject(ctx, obj, view, ink, selectedId === obj.id, dark);
+  // Draw order: zones, walls, marks, links, beams, cameras, lights, gear, talent. Objects outside the view are dimmed.
+  const pv = o.planView ?? 'all';
+  const alpha = (obj: DiagramObject) => (inView(obj, pv) ? 1 : 0.16);
+  const each = (type: DiagramObject['type'], fn: (obj: DiagramObject) => void) => {
+    for (const obj of objects) {
+      if (obj.type !== type) continue;
+      ctx.globalAlpha = alpha(obj);
+      fn(obj);
+    }
+    ctx.globalAlpha = 1;
+  };
+  each('zone', (obj) => drawZone(ctx, obj as DiagramZone, view, ink, selectedId === obj.id, dark));
+  each('wall', (obj) => drawWall(ctx, obj as DiagramObject & { type: 'wall' }, view, ink, selectedId === obj.id));
+  each('mark', (obj) => drawMark(ctx, obj as DiagramMark, view, label, selectedId === obj.id));
+  if (o.links?.length) drawLinks(ctx, o.links, objects, view, pv);
+  each('light', (obj) => drawBeam(ctx, obj as DiagramLight, view, dark));
+  each('camera', (obj) => drawCamera(ctx, obj as DiagramCamera, view, ink, o.cameraFovDeg, selectedId === obj.id, dark));
+  each('light', (obj) => drawLight(ctx, obj as DiagramLight, view, ink, label, selectedId === obj.id, dark));
+  each('gear', (obj) => drawGear(ctx, obj as DiagramGear, view, ink, label, selectedId === obj.id, dark));
+  each('subject', (obj) => drawSubject(ctx, obj as DiagramObject & { type: 'subject' }, view, ink, selectedId === obj.id, dark));
 
   // Selection ring + rotate handle
   if (o.showHandles !== false && selectedId) {
@@ -175,7 +211,17 @@ export function draw(ctx: CanvasRenderingContext2D, o: DrawOptions) {
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
-      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      if (sel.type === 'zone') {
+        const zw = sel.w * view.scale + 8;
+        const zh = sel.h * view.scale + 8;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate((sel.rotation * Math.PI) / 180);
+        ctx.rect(-zw / 2, -zh / 2, zw, zh);
+        ctx.stroke();
+        ctx.restore();
+        ctx.beginPath();
+      } else ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
       const d = dirFromRotation(sel.rotation);
@@ -408,6 +454,130 @@ function drawSubject(ctx: CanvasRenderingContext2D, s: DiagramObject & { type: '
   ctx.restore();
 }
 
+const ZONE_FILL: Record<string, [string, string]> = {
+  base: ['rgba(255,196,0,0.16)', 'rgba(255,196,0,0.14)'],
+  village: ['rgba(11,11,12,0.05)', 'rgba(243,241,234,0.06)'],
+  power: ['rgba(179,38,30,0.07)', 'rgba(255,107,94,0.1)'],
+  nogo: ['rgba(179,38,30,0.1)', 'rgba(255,107,94,0.12)'],
+};
+
+function drawZone(ctx: CanvasRenderingContext2D, z: DiagramZone, v: View, ink: string, selected: boolean, dark: boolean) {
+  const [sx, sy] = toScreen(v, z.x, z.y);
+  const w = z.w * v.scale;
+  const h = z.h * v.scale;
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate((z.rotation * Math.PI) / 180);
+  const fill = ZONE_FILL[z.zoneKind] ?? ['rgba(11,11,12,0.04)', 'rgba(243,241,234,0.05)'];
+  ctx.fillStyle = dark ? fill[1] : fill[0];
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.strokeStyle = z.zoneKind === 'base' ? '#e0ab00' : z.zoneKind === 'nogo' || z.zoneKind === 'power' ? '#b3261e' : ink;
+  ctx.lineWidth = selected ? 2 : 1.25;
+  ctx.setLineDash(z.zoneKind === 'nogo' ? [3, 3] : [8, 5]);
+  ctx.strokeRect(-w / 2, -h / 2, w, h);
+  ctx.setLineDash([]);
+  ctx.fillStyle = dark ? '#f3f1ea' : '#0b0b0c';
+  ctx.font = '600 11px "Inter Tight", sans-serif';
+  ctx.fillText(z.label.toUpperCase(), -w / 2 + 6, -h / 2 + 15);
+  ctx.restore();
+}
+
+function drawMark(ctx: CanvasRenderingContext2D, m: DiagramMark, v: View, label: string, selected: boolean) {
+  const [sx, sy] = toScreen(v, m.x, m.y);
+  ctx.save();
+  ctx.strokeStyle = selected ? '#FFC400' : '#e0ab00';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(sx - 7, sy - 4);
+  ctx.lineTo(sx + 7, sy - 4);
+  ctx.moveTo(sx, sy - 4);
+  ctx.lineTo(sx, sy + 7);
+  ctx.stroke();
+  ctx.fillStyle = label;
+  ctx.font = '500 10px "IBM Plex Mono", monospace';
+  ctx.fillText(m.label, sx + 10, sy + 4);
+  ctx.restore();
+}
+
+function drawGear(ctx: CanvasRenderingContext2D, g: DiagramGear, v: View, ink: string, labelColour: string, selected: boolean, dark: boolean) {
+  const [sx, sy] = toScreen(v, g.x, g.y);
+  const info = categoryInfo(g.category);
+  const d = dirFromRotation(g.rotation);
+  ctx.save();
+  // Mics show their pickup direction
+  if (g.category === 'mic') {
+    const a0 = ((g.rotation - 90) * Math.PI) / 180;
+    const len = Math.max(30, 1.2 * v.scale);
+    const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, len);
+    grd.addColorStop(0, 'rgba(63,111,160,0.32)');
+    grd.addColorStop(1, 'rgba(63,111,160,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.arc(sx, sy, len, a0 - 0.45, a0 + 0.45);
+    ctx.closePath();
+    ctx.fill();
+  }
+  const w = 30;
+  const h = 18;
+  ctx.fillStyle = selected ? '#FFC400' : dark ? '#1f1f21' : '#ffffff';
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.rect(sx - w / 2, sy - h / 2, w, h);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = selected ? '#0b0b0c' : ink;
+  ctx.font = '600 9px "IBM Plex Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(info.code, sx, sy + 3.5);
+  ctx.textAlign = 'left';
+  ctx.beginPath();
+  ctx.moveTo(sx + d.x * (h / 2), sy - d.y * (h / 2));
+  ctx.lineTo(sx + d.x * (h / 2 + 7), sy - d.y * (h / 2 + 7));
+  ctx.stroke();
+  ctx.fillStyle = selected ? '#e0ab00' : labelColour;
+  ctx.font = '10px "Inter Tight", sans-serif';
+  ctx.fillText(g.label, sx + w / 2 + 4, sy + 14);
+  ctx.restore();
+}
+
+function drawLinks(ctx: CanvasRenderingContext2D, links: PlanLink[], objects: DiagramObject[], v: View, pv: PlanView) {
+  ctx.save();
+  for (const l of links) {
+    const a = objects.find((o) => o.id === l.from);
+    const b = objects.find((o) => o.id === l.to);
+    if (!a || !b) continue;
+    const visible = pv === 'all' || (inView(a, pv) && inView(b, pv));
+    ctx.globalAlpha = visible ? 0.9 : 0.12;
+    const st = LINK_STYLE[l.signal];
+    const [ax, ay] = toScreen(v, a.x, a.y);
+    const [bx, by] = toScreen(v, b.x, b.y);
+    ctx.strokeStyle = st.colour;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(l.wireless ? [1, 5] : st.dash);
+    ctx.lineCap = 'round';
+    // Gentle curve so parallel runs stay readable
+    const mx = (ax + bx) / 2 + (by - ay) * 0.12;
+    const my = (ay + by) / 2 - (bx - ax) * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.quadraticCurveTo(mx, my, bx, by);
+    ctx.stroke();
+    // Arrow head at the input end
+    const ang = Math.atan2(by - my, bx - mx);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(bx - Math.cos(ang) * 14, by - Math.sin(ang) * 14);
+    ctx.lineTo(bx - Math.cos(ang) * 14 - Math.cos(ang - 0.5) * 7, by - Math.sin(ang) * 14 - Math.sin(ang - 0.5) * 7);
+    ctx.moveTo(bx - Math.cos(ang) * 14, by - Math.sin(ang) * 14);
+    ctx.lineTo(bx - Math.cos(ang) * 14 - Math.cos(ang + 0.5) * 7, by - Math.sin(ang) * 14 - Math.sin(ang + 0.5) * 7);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function hexWithAlpha(hex: string, a: number): string {
   const n = parseInt(hex.replace('#', ''), 16);
   if (Number.isNaN(n)) return `rgba(255,196,0,${a})`;
@@ -415,13 +585,22 @@ function hexWithAlpha(hex: string, a: number): string {
 }
 
 /** Hit test in screen space. Returns the topmost object under the point. */
-export function hitTest(objects: DiagramObject[], view: View, sx: number, sy: number): DiagramObject | null {
-  const order = objects.slice().reverse();
-  // Subjects and cameras first, then lights, then walls
-  const prio = (o: DiagramObject) => (o.type === 'subject' ? 0 : o.type === 'camera' ? 1 : o.type === 'light' ? 2 : 3);
+export function hitTest(objects: DiagramObject[], view: View, sx: number, sy: number, pv: PlanView = 'all'): DiagramObject | null {
+  const order = objects.slice().reverse().filter((o) => inView(o, pv));
+  // Talent and cameras first, then lights and gear, then walls, then zones underneath everything
+  const prio = (o: DiagramObject) => (o.type === 'subject' ? 0 : o.type === 'camera' ? 1 : o.type === 'gear' || o.type === 'mark' ? 2 : o.type === 'light' ? 3 : o.type === 'wall' ? 4 : 5);
   order.sort((a, b) => prio(a) - prio(b));
   for (const o of order) {
     const [ox, oy] = toScreen(view, o.x, o.y);
+    if (o.type === 'zone') {
+      const r = (-o.rotation * Math.PI) / 180;
+      const dx = sx - ox;
+      const dy = sy - oy;
+      const lx = dx * Math.cos(r) - dy * Math.sin(r);
+      const ly = dx * Math.sin(r) + dy * Math.cos(r);
+      if (Math.abs(lx) <= (o.w * view.scale) / 2 && Math.abs(ly) <= (o.h * view.scale) / 2) return o;
+      continue;
+    }
     if (o.type === 'wall' || (o.type === 'light' && !EMITTING.includes(o.kind))) {
       const len = (o.type === 'wall' ? o.length : Math.max(0.3, o.size)) * view.scale;
       const d = dirFromRotation(o.rotation);

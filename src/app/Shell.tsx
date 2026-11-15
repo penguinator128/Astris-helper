@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router';
-import { ChevronDown, MoreHorizontal, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
-import { TAB_TOOLS, MORE_TOOLS, TOOLS, UTILITY_NAV } from './nav';
+import { ChevronDown, FolderOpen } from 'lucide-react';
+import { TAB_TOOLS, PLAN_TOOLS, KIT_TOOLS, TOOLKIT_TAB, UTILITY_NAV } from './nav';
 import { Wordmark, StarMark } from '@/brand/Wordmark';
 import { useProject } from '@/store/projects';
 import { ProjectSwitcher } from './ProjectSwitcher';
-import { Sheet } from '@/components/Sheet';
 import { Toasts } from '@/components/Toasts';
 import { UpdatePrompt } from './UpdatePrompt';
 
@@ -13,10 +12,9 @@ export function Shell() {
   const project = useProject();
   const location = useLocation();
   const [switcher, setSwitcher] = useState(false);
-  const [more, setMore] = useState(false);
   const immersive = location.pathname.startsWith('/slate');
 
-  const moreActive = MORE_TOOLS.some((t) => location.pathname.startsWith(t.path)) || UTILITY_NAV.some((u) => location.pathname.startsWith(u.path));
+  const kitActive = location.pathname.startsWith('/toolkit') || KIT_TOOLS.some((t) => location.pathname.startsWith(t.path)) || UTILITY_NAV.some((u) => location.pathname.startsWith(u.path)) || ['/checklist', '/export'].some((p) => location.pathname.startsWith(p));
 
   return (
     <div className="shell">
@@ -37,8 +35,18 @@ export function Shell() {
             </button>
           </div>
           <div className="rail__section">
-            <div className="micro rail__label">Tools</div>
-            {TOOLS.map((t) => (
+            <div className="micro rail__label">Shoot plan</div>
+            {PLAN_TOOLS.map((t) => (
+              <NavLink key={t.id} to={t.path} className="rail__item">
+                <span className="rail__idx">{t.index}</span>
+                <t.icon size={16} />
+                <span>{t.name}</span>
+              </NavLink>
+            ))}
+          </div>
+          <div className="rail__section">
+            <div className="micro rail__label">Toolkit</div>
+            {KIT_TOOLS.map((t) => (
               <NavLink key={t.id} to={t.path} className="rail__item">
                 <span className="rail__idx">{t.index}</span>
                 <t.icon size={16} />
@@ -83,38 +91,13 @@ export function Shell() {
               <span>{t.short}</span>
             </NavLink>
           ))}
-          <button type="button" className={`tabbar__item ${moreActive ? 'is-active' : ''}`} onClick={() => setMore(true)} aria-haspopup="dialog" aria-expanded={more}>
-            <MoreHorizontal size={20} strokeWidth={1.75} />
-            <span>More</span>
-          </button>
+          <NavLink to={TOOLKIT_TAB.path} className={`tabbar__item ${kitActive ? 'is-active' : ''}`}>
+            <TOOLKIT_TAB.icon size={20} strokeWidth={1.75} />
+            <span>{TOOLKIT_TAB.short}</span>
+          </NavLink>
         </nav>
       )}
 
-      <Sheet open={more} onClose={() => setMore(false)} title="More tools">
-        <div className="rows">
-          {MORE_TOOLS.map((t) => (
-            <Link key={t.id} to={t.path} className="row" onClick={() => setMore(false)}>
-              <span className="row__idx">{t.index}</span>
-              <div className="row__main">
-                <div className="row__title">{t.name}</div>
-                <div className="row__sub">{t.description}</div>
-              </div>
-              <span className="row__end">
-                <t.icon size={18} />
-              </span>
-            </Link>
-          ))}
-          {UTILITY_NAV.map((u) => (
-            <Link key={u.id} to={u.path} className="row" onClick={() => setMore(false)}>
-              <span className="row__idx" />
-              <div className="row__main">
-                <div className="row__title">{u.name}</div>
-              </div>
-              <span className="row__end">{u.id === 'settings' ? <SettingsIcon size={18} /> : <FolderOpen size={18} />}</span>
-            </Link>
-          ))}
-        </div>
-      </Sheet>
 
       <ProjectSwitcher open={switcher} onClose={() => setSwitcher(false)} />
       <Toasts />

@@ -96,7 +96,7 @@ export default function ExportPage() {
 
   return (
     <main className="page">
-      <PageHead index="12 · Export" title="Shoot Pack" sub={`A branded PDF of ${project.name}, plus image and backup exports.`} />
+      <PageHead index="07 · Shoot Pack" title="Shoot Pack" sub={`A branded PDF of ${project.name}, plus image and backup exports.`} />
       <div className="tool">
         <div className="stack">
           <Blueprint title="Include" index="01">

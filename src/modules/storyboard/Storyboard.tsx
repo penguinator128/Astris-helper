@@ -82,7 +82,7 @@ export default function Storyboard() {
   return (
     <main className="page page--wide">
       <PageHead
-        index="07 · Board"
+        index="04 · Storyboard"
         title="Storyboard"
         sub={frames.length ? `${frames.length} frames · about ${Math.round(total)} s` : 'Frames from compositions, images or sketches.'}
         actions={

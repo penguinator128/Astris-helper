@@ -174,6 +174,7 @@ export interface DiagramSubject extends DiagramObjectBase {
 
 export interface DiagramCamera extends DiagramObjectBase {
   type: 'camera';
+  gearId?: string;
   // FOV comes from the project camera setup
 }
 
@@ -184,6 +185,7 @@ export interface DiagramWall extends DiagramObjectBase {
 
 export interface DiagramLight extends DiagramObjectBase {
   type: 'light';
+  gearId?: string;
   kind: LightKind;
   power: number; // 0..100 %
   kelvin: number; // colour temperature
@@ -194,7 +196,93 @@ export interface DiagramLight extends DiagramObjectBase {
   spread: number; // beam angle degrees
 }
 
-export type DiagramObject = DiagramSubject | DiagramCamera | DiagramWall | DiagramLight;
+/** Any other piece of kit placed on the plan: mics, recorders, wireless, monitors, grip, power. */
+export interface DiagramGear extends DiagramObjectBase {
+  type: 'gear';
+  category: GearCategory;
+  gearId?: string;
+}
+
+export type ZoneKind = 'base' | 'village' | 'power' | 'staging' | 'makeup' | 'parking' | 'nogo' | 'other';
+
+export const ZONE_KINDS: { id: ZoneKind; label: string }[] = [
+  { id: 'base', label: 'Home base' },
+  { id: 'village', label: 'Video village' },
+  { id: 'power', label: 'Power' },
+  { id: 'staging', label: 'Gear staging' },
+  { id: 'makeup', label: 'Hair and make-up' },
+  { id: 'parking', label: 'Parking' },
+  { id: 'nogo', label: 'Keep clear' },
+  { id: 'other', label: 'Area' },
+];
+
+/** A rectangular area on the plan, sized in metres. */
+export interface DiagramZone extends DiagramObjectBase {
+  type: 'zone';
+  zoneKind: ZoneKind;
+  w: number;
+  h: number;
+}
+
+/** A floor mark for talent or camera. */
+export interface DiagramMark extends DiagramObjectBase {
+  type: 'mark';
+}
+
+export type DiagramObject = DiagramSubject | DiagramCamera | DiagramWall | DiagramLight | DiagramGear | DiagramZone | DiagramMark;
+
+/* ---------- Gear inventory, inputs and outputs ---------- */
+
+export type GearCategory = 'camera' | 'lens' | 'monitor' | 'mic' | 'wireless' | 'recorder' | 'audio-acc' | 'light' | 'grip' | 'power' | 'media' | 'other';
+
+export type Connector =
+  | 'XLR'
+  | '3.5 mm TRS'
+  | '3.5 mm TRRS'
+  | '6.35 mm TRS'
+  | 'HDMI'
+  | 'Micro HDMI'
+  | 'Mini HDMI'
+  | 'SDI'
+  | 'USB-C'
+  | 'BNC timecode'
+  | 'Wireless'
+  | 'Shoe'
+  | 'Mains'
+  | 'DC barrel'
+  | 'D-tap'
+  | 'Other';
+
+export type SignalKind = 'audio' | 'video' | 'timecode' | 'power' | 'data';
+
+export interface GearPort {
+  id: string;
+  name: string;
+  dir: 'in' | 'out';
+  connector: Connector;
+  signal: SignalKind;
+}
+
+export interface GearItem {
+  id: string;
+  category: GearCategory;
+  name: string;
+  model: string;
+  qty: number;
+  power: string; // battery type or 'Mains', '' if none
+  ports: GearPort[];
+  notes: string;
+}
+
+/** A cable or wireless link from one item's output to another item's input. */
+export interface Connection {
+  id: string;
+  fromGear: string;
+  fromPort: string;
+  toGear: string;
+  toPort: string;
+  notes: string;
+}
 
 export interface LightingDiagram {
   id: string;
@@ -388,6 +476,8 @@ export interface Project {
   checklist: ChecklistItem[];
   awards: Ceremony[];
   slate: SlateState;
+  gear: GearItem[];
+  connections: Connection[];
 }
 
 export interface ProjectExport {

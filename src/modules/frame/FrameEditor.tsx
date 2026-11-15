@@ -226,7 +226,7 @@ function Editor({ initial }: { initial: Composition }) {
             <ArrowLeft size={18} />
           </Link>
           <div style={{ minWidth: 0 }}>
-            <span className="page__idx">03 · Frame</span>
+            <span className="page__idx">Toolkit · Shot designer</span>
             <h1 className="visually-hidden">{comp.name}</h1>
             <input className="input" aria-label="Frame name" value={comp.name} onChange={(e) => update({ name: e.target.value })} style={{ fontWeight: 600, fontSize: 'var(--fs-20)', border: 0, padding: 0, minHeight: 32, background: 'transparent' }} />
           </div>

@@ -43,7 +43,7 @@ export async function exportAll(projects: Project[]): Promise<BackupFile> {
 export function normaliseProject(raw: Partial<Project>): Project {
   const base = createEmptyProject(typeof raw.name === 'string' ? raw.name : 'Imported project');
   const p: Project = { ...base, ...raw, camera: { ...base.camera, ...(raw.camera ?? {}) }, callSheet: { ...base.callSheet, ...(raw.callSheet ?? {}) }, slate: { ...base.slate, ...(raw.slate ?? {}) } } as Project;
-  for (const key of ['shots', 'storyboard', 'diagrams', 'compositions', 'palettes', 'colourScript', 'plans', 'checklist', 'awards'] as const) {
+  for (const key of ['shots', 'storyboard', 'diagrams', 'compositions', 'palettes', 'colourScript', 'plans', 'checklist', 'awards', 'gear', 'connections'] as const) {
     if (!Array.isArray(p[key])) (p as unknown as Record<string, unknown>)[key] = [];
   }
   if (typeof p.id !== 'string' || !p.id) p.id = uid();

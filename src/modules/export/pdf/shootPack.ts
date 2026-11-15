@@ -5,6 +5,8 @@ import { C, Pack, clean, table, type RGB } from './pack';
 import { compositionPng, storyboardFramePng } from './raster';
 import { renderDiagramPng } from '@/modules/light/diagramPng';
 import { evaluate, ratioLabel, EMITTING } from '@/lib/light/photometry';
+import { CATEGORIES, PLAN_VIEWS, SIGNALS, cableFor, categoryInfo, layerOf, planLinks } from '@/lib/gear/catalog';
+import { equipmentList } from '@/lib/gear/equipment';
 import { getSensor } from '@/lib/calc/sensors';
 import { fieldOfView, backgroundBlurFraction, describeBlur } from '@/lib/calc/optics';
 import { classifyShotSize } from '@/lib/frame/shotSize';
@@ -128,10 +130,11 @@ function drawCover({ p, project, settings }: Ctx, toc: { label: string; page: nu
   p.hline(p.M, p.W - p.M, y, C.line, 0.25);
   const colW = p.landscape ? (p.cw - 12) / 2 : p.cw;
   const perCol = p.landscape ? Math.ceil(toc.length / 2) : toc.length;
+  const rowH = perCol > 8 ? 8.4 : 10;
   toc.forEach((e, i) => {
     const col = Math.floor(i / perCol);
     const x = p.M + col * (colW + 12);
-    const ry = y + (i % perCol) * 10 + 7;
+    const ry = y + (i % perCol) * rowH + 7;
     p.micro(e.index, x, ry);
     p.font('uiMd', 11, C.ink);
     p.text(e.label, x + 10, ry);
@@ -141,7 +144,8 @@ function drawCover({ p, project, settings }: Ctx, toc: { label: string; page: nu
   });
 
   // Production facts
-  const factsY = p.H - 50;
+  const factsY = Math.max(p.H - 50, y + perCol * rowH + 18);
+  if (factsY > p.H - 26) return;
   const sensor = getSensor(project.camera.sensorId, project.camera.customSensor);
   const cs = project.callSheet;
   const facts: [string, string][] = [
@@ -371,24 +375,29 @@ async function framesSection({ p, project, len }: Ctx) {
 
 async function lightingSection({ p, project, plan }: Ctx) {
   const diagrams = project.diagrams.slice().sort((a, b) => a.updatedAt - b.updatedAt);
-  if (!diagrams.length) return empty(p, 'No lighting diagrams yet.');
+  if (!diagrams.length) return empty(p, 'No set-ups on the shoot plan yet.');
   const sensor = getSensor(project.camera.sensorId, project.camera.customSensor);
   const fov = fieldOfView(project.camera.focalLength, sensor.width, sensor.height);
   for (let i = 0; i < diagrams.length; i++) {
     const d = diagrams[i];
     if (i > 0) p.newPage();
     const ph = evaluate(d.objects);
-    p.subTitle(d.name, `${d.objects.filter((o) => o.type === 'light').length} lights`);
+    const links = planLinks(d.objects, project.gear, project.connections);
+    const count = (t: string) => d.objects.filter((o) => o.type === t).length;
+    p.subTitle(d.name, `${count('camera')} cam · ${count('light')} lights · ${count('gear')} other kit`);
     const imgW = p.landscape ? 126 : p.cw;
     const imgH = imgW * 0.75;
-    const png = renderDiagramPng(d.objects, 1200, 900, fov.horizontal, 'light', 1.5);
+    const png = renderDiagramPng(d.objects, 1200, 900, fov.horizontal, 'light', 1.5, 'all', links);
     p.doc.addImage(png, 'PNG', p.M, p.y, imgW, imgH, undefined, 'FAST');
     p.stroke(C.lineStrong, 0.2);
     p.doc.rect(p.M, p.y, imgW, imgH, 'S');
     const sideX = p.landscape ? p.M + imgW + 8 : p.M;
     const sideW = p.landscape ? p.W - p.M - sideX : p.cw;
     let y = p.landscape ? p.y : p.y + imgH + 6;
+    const subject = d.objects.find((o) => o.type === 'subject');
+    const lights = d.objects.filter((o): o is DiagramLight => o.type === 'light');
     const panelH = 20;
+    if (lights.length) {
     p.panel(sideX, y, sideW, panelH, C.yellow, C.yellowDeep);
     const ro: [string, string][] = [
       ['Key : fill', ratioLabel(ph.ratio)],
@@ -399,8 +408,6 @@ async function lightingSection({ p, project, plan }: Ctx) {
     const rw = (sideW - 6) / ro.length;
     ro.forEach(([l, v], k) => p.readout(l, v, sideX + 4 + k * rw, y + 7.5, p.landscape ? 10.5 : 13, C.ink, C.fg2));
     y += panelH + 6;
-    const subject = d.objects.find((o) => o.type === 'subject');
-    const lights = d.objects.filter((o): o is DiagramLight => o.type === 'light');
     p.y = y;
     table(
       p,
@@ -417,6 +424,7 @@ async function lightingSection({ p, project, plan }: Ctx) {
       { size: 7.5, x: sideX, width: sideW },
     );
     p.y += 5;
+    } else p.y = y - panelH - 6;
     if (d.notes) {
       p.micro('Notes', sideX, p.y + 2);
       p.y += 4;
@@ -427,7 +435,119 @@ async function lightingSection({ p, project, plan }: Ctx) {
       p.micro(`Used in shots ${used.join(', ')}`, sideX, p.y + 2);
       p.y += 6;
     }
+
+    // Kit on this set-up (cameras, audio, base), with gear and connections
+    const kit = d.objects.filter((o) => o.type === 'camera' || o.type === 'gear' || o.type === 'zone' || o.type === 'mark');
+    if (kit.length) {
+      p.y += 4;
+      p.ensure(24);
+      p.subTitle('Kit and areas on this set-up');
+      const gearOf = (o: (typeof kit)[number]) => ('gearId' in o ? project.gear.find((g) => g.id === o.gearId) : undefined);
+      const linksOf = (o: (typeof kit)[number]) => {
+        const g = gearOf(o);
+        if (!g) return '';
+        const nm = (id: string) => project.gear.find((x) => x.id === id)?.name ?? '';
+        return project.connections.filter((c) => c.fromGear === g.id || c.toGear === g.id).map((c) => (c.fromGear === g.id ? `to ${nm(c.toGear)}` : `from ${nm(c.fromGear)}`)).join(', ');
+      };
+      table(
+        p,
+        [
+          { label: 'View', w: 18, get: (o) => PLAN_VIEWS.find((v) => v.id === layerOf(o))?.label ?? 'Set', mono: true },
+          { label: 'Item', get: (o) => o.label },
+          { label: 'Gear', get: (o) => (o.type === 'zone' ? `${o.w} × ${o.h} m area` : o.type === 'mark' ? 'Floor mark' : gearOf(o)?.model || gearOf(o)?.name || 'Not assigned') },
+          { label: 'Connections', get: (o) => linksOf(o) },
+        ],
+        kit,
+        { size: 7.5 },
+      );
+    }
+
+    // The four department views on one page
+    const views = (['camera', 'lighting', 'audio', 'base'] as const).filter((v) => d.objects.some((o) => layerOf(o) === v));
+    if (views.length > 1) {
+      p.newPage();
+      p.subTitle(`${d.name} · views`, views.map((v) => PLAN_VIEWS.find((x) => x.id === v)?.label).join(' · '));
+      const cols = 2;
+      const gap = 6;
+      const vw = (p.cw - gap) / cols;
+      const vh = Math.min(vw * 0.75, (p.bottom - p.y - 16) / 2 - 8);
+      const iw = vh / 0.75;
+      views.forEach((v, k) => {
+        const x = p.M + (k % cols) * (vw + gap);
+        const y = p.y + Math.floor(k / cols) * (vh + 12);
+        p.micro(PLAN_VIEWS.find((x2) => x2.id === v)?.label ?? v, x, y + 3);
+        const img = renderDiagramPng(d.objects, 800, 600, fov.horizontal, 'light', 1.2, v, links);
+        p.doc.addImage(img, 'PNG', x, y + 5, iw, vh, undefined, 'FAST');
+        p.stroke(C.lineStrong, 0.2);
+        p.doc.rect(x, y + 5, iw, vh, 'S');
+      });
+      p.y += Math.ceil(views.length / cols) * (vh + 12);
+    }
   }
+}
+
+/* ---------- Equipment list ---------- */
+
+async function equipmentSection({ p, project }: Ctx) {
+  const list = equipmentList(project);
+  if (!list.length) return empty(p, 'Add gear and place items on the shoot plan to build the equipment list.');
+  p.font('mono', 8, C.fg2);
+  p.text(`${list.length} lines · ${list.reduce((a, r) => a + r.qty, 0)} items. Counts use the busiest set-up; batteries are one per device plus a spare.`, p.M, p.y);
+  p.y += 6;
+  table(
+    p,
+    [
+      { label: '', w: 7, get: () => ' ' },
+      { label: 'Qty', w: 11, get: (r) => String(r.qty), mono: true, align: 'right' },
+      { label: 'Item', get: (r) => r.name },
+      { label: 'Why', get: (r) => r.why, colour: () => C.fg2 },
+    ],
+    list,
+    { groupOf: (r) => r.group, groupLabel: (g, rows) => `${g} · ${rows.reduce((a, r) => a + r.qty, 0)}` },
+  );
+}
+
+/* ---------- Gear and connections ---------- */
+
+async function gearSection({ p, project }: Ctx) {
+  if (!project.gear.length) return empty(p, 'No gear listed yet.');
+  const order = CATEGORIES.map((c) => c.id);
+  const gear = project.gear.slice().sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  const ports = (g: (typeof gear)[number], dir: 'in' | 'out') => g.ports.filter((x) => x.dir === dir).map((x) => `${x.name} (${x.connector})`).join(', ');
+  table(
+    p,
+    [
+      { label: 'Name', get: (g) => `${g.name}${g.qty > 1 ? ` ×${g.qty}` : ''}` },
+      { label: 'Model', w: p.landscape ? 40 : 28, get: (g) => (g.model !== g.name ? g.model : '') },
+      { label: 'Power', w: 20, get: (g) => g.power, mono: true },
+      { label: 'Inputs', get: (g) => ports(g, 'in') },
+      { label: 'Outputs', get: (g) => ports(g, 'out') },
+    ],
+    gear,
+    { size: 7.5, groupOf: (g) => categoryInfo(g.category).label },
+  );
+  if (!project.connections.length) return;
+  p.y += 8;
+  p.ensure(24);
+  p.subTitle('Connections', `${project.connections.length} links`);
+  const rows = project.connections.map((c) => {
+    const fg = project.gear.find((g) => g.id === c.fromGear);
+    const tg = project.gear.find((g) => g.id === c.toGear);
+    const fp = fg?.ports.find((x) => x.id === c.fromPort);
+    const tp = tg?.ports.find((x) => x.id === c.toPort);
+    return { c, fg, tg, fp, tp };
+  });
+  table(
+    p,
+    [
+      { label: 'From', get: (r) => `${r.fg?.name ?? ''} · ${r.fp?.name ?? ''}` },
+      { label: 'To', get: (r) => `${r.tg?.name ?? ''} · ${r.tp?.name ?? ''}` },
+      { label: 'Cable', w: p.landscape ? 50 : 38, get: (r) => (r.fp && r.tp ? cableFor(r.fp.connector, r.tp.connector) ?? 'Wireless' : ''), mono: true },
+      { label: 'Notes', w: p.landscape ? 50 : 28, get: (r) => r.c.notes },
+    ],
+    rows,
+    { size: 7.5, groupOf: (r) => SIGNALS.find((x) => x.id === r.fp?.signal)?.label ?? 'Other' },
+  );
 }
 
 /* ---------- Colour ---------- */
@@ -706,6 +826,8 @@ const SECTION_BUILDERS: Record<SectionId, (ctx: Ctx) => Promise<void>> = {
   storyboard: storyboardSection,
   frames: framesSection,
   lighting: lightingSection,
+  equipment: equipmentSection,
+  gear: gearSection,
   colour: colourSection,
   sunplan: sunPlanSection,
   checklist: checklistSection,

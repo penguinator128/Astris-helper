@@ -73,8 +73,8 @@ export function ShotForm({ shot, onChange, onClose, onDelete, onDuplicate }: Pro
               <span className="tag">No frame</span>
             )}
             {diagram ? (
-              <Link to={`/light/${diagram.id}`} className="tag tag--wash">
-                Lighting · {diagram.name}
+              <Link to={`/plan/${diagram.id}`} className="tag tag--wash">
+                Plan · {diagram.name}
               </Link>
             ) : (
               <span className="tag">No diagram</span>

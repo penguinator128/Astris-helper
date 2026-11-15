@@ -45,7 +45,7 @@ export default function ShadowCalc() {
               <Stepper label="Sun elevation" unit="°" value={elevation} onChange={setElevation} min={0} max={90} step={1} />
             ) : (
               <p className="small muted">
-                Sun is at {fmtDegrees(sun.altitude)} elevation, azimuth {fmtDegrees(sun.azimuth, 0)} ({compass(sun.azimuth)}). <Link to="/plan">Pick another time in the planner.</Link>
+                Sun is at {fmtDegrees(sun.altitude)} elevation, azimuth {fmtDegrees(sun.azimuth, 0)} ({compass(sun.azimuth)}). <Link to="/sun">Pick another time in the planner.</Link>
               </p>
             )}
           </div>

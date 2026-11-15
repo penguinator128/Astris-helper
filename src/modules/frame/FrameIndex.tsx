@@ -27,7 +27,7 @@ export default function FrameIndex() {
   return (
     <main className="page">
       <PageHead
-        index="03 · Frame"
+        index="Toolkit · Shot designer"
         title="Shot Designer"
         sub="Compose frames with guides and silhouettes, tied to your lens."
         actions={

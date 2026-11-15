@@ -56,7 +56,7 @@
     font-size: var(--fs-28);
   }
 }
-.home-head__more {
+.home-head__more-unused {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -67,7 +67,7 @@
   justify-self: start;
 }
 @media (min-width: 900px) {
-  .home-head__more {
+  .home-head__more-unused {
     grid-column: 2;
     grid-row: 1;
     justify-self: end;
@@ -114,4 +114,104 @@
 .home-project__meta {
   font-size: var(--fs-12);
   color: var(--fg-3);
+}
+
+.home-head__project {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.home-head__name {
+  font-size: var(--fs-28);
+  font-weight: 600;
+  letter-spacing: var(--track-tight);
+  line-height: var(--lh-tight);
+}
+@media (min-width: 600px) {
+  .home-head__name {
+    font-size: var(--fs-44);
+  }
+}
+.home-head__date {
+  font-size: var(--fs-14);
+}
+.home-head__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+@media (min-width: 900px) {
+  .home-head__cta {
+    grid-column: 1 / -1;
+  }
+}
+.home-head__primary {
+  background: var(--ink);
+  color: var(--yellow);
+  border-color: var(--ink);
+}
+.home-head__primary:hover {
+  background: #26262a;
+}
+.home-head__secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.home-head__secondary:hover {
+  background: rgba(11, 11, 12, 0.08);
+}
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--hair);
+}
+.home-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-3);
+  border-right: 1px solid var(--hair);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+.home-stat:last-child {
+  border-right: 0;
+}
+.home-stat:hover {
+  background: var(--bg-2);
+}
+@media (max-width: 520px) {
+  .home-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .home-stat:nth-child(3) {
+    border-right: 0;
+  }
+  .home-stat:nth-child(n + 4) {
+    border-top: 1px solid var(--hair);
+  }
+}
+.home-kit {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s-2);
+}
+.home-kit__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 48px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  text-decoration: none;
+  color: inherit;
+  font-size: var(--fs-14);
+  font-weight: 500;
+}
+.home-kit__item:hover {
+  background: var(--bg-2);
+  border-color: var(--hair-strong);
 }

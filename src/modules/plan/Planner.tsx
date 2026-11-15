@@ -138,7 +138,7 @@ export default function Planner() {
   return (
     <main className="page">
       <PageHead
-        index="01 · Planner"
+        index="Toolkit · Sun and moon"
         title="Sun and Moon Planner"
         sub={`${fmtDate(instant, tz, { weekday: 'long', day: 'numeric', month: 'long' })} · ${t(instant)} · ${tz}`}
         actions={

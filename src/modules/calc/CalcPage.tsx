@@ -14,7 +14,7 @@ export default function CalcPage() {
   return (
     <main className="page">
       <PageHead
-        index={`05 · ${def.index}`}
+        index={`Calculators · ${def.index}`}
         title={def.name}
         sub={def.description}
         actions={

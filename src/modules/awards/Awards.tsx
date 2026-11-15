@@ -40,7 +40,7 @@ export default function Awards() {
   return (
     <main className="page">
       <PageHead
-        index="09 · Awards"
+        index="Toolkit · Awards"
         title="Astris Awards"
         sub="Ceremonies, categories and nominees, with printable cards and an envelope reveal."
         actions={

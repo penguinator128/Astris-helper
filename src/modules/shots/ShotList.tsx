@@ -121,7 +121,7 @@ export default function ShotList() {
   return (
     <main className="page page--wide">
       <PageHead
-        index="06 · Shots"
+        index="03 · Shots"
         title="Shot List"
         sub={shots.length ? `${shots.length} shots · ${done} shot · ${shots.length - done} to go` : 'Scenes and shots for this project.'}
         actions={
@@ -238,8 +238,8 @@ function Links({ shot }: { shot: Shot }) {
         </a>
       )}
       {shot.diagramId && (
-        <a href={`/light/${shot.diagramId}`} className="tag tag--wash" onClick={(e) => e.stopPropagation()}>
-          Light
+        <a href={`/plan/${shot.diagramId}`} className="tag tag--wash" onClick={(e) => e.stopPropagation()}>
+          Plan
         </a>
       )}
       {shot.paletteId && <span className="tag">Palette</span>}

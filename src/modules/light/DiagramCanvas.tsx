@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DiagramObject } from '@/types/project';
-import { draw, fitView, hitTest, rotateHandlePos, toWorld, type DrawOptions, type View } from './draw';
+import { draw, fitView, hitTest, rotateHandlePos, toWorld, type DrawOptions, type PlanLink, type View } from './draw';
+import type { PlanView } from '@/lib/gear/catalog';
 
 interface Props {
   objects: DiagramObject[];
@@ -15,11 +16,13 @@ interface Props {
   theme: 'light' | 'dark';
   sunPath: DrawOptions['sunPath'];
   fitKey: number;
+  planView?: PlanView;
+  links?: PlanLink[];
 }
 
 type Mode = { kind: 'none' } | { kind: 'pan'; sx: number; sy: number; view: View } | { kind: 'move'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean } | { kind: 'rotate'; id: string } | { kind: 'pinch'; d0: number; view: View; cx: number; cy: number };
 
-export function DiagramCanvas({ objects, selectedId, onSelect, onLive, onCommit, onTapSelected, snap, gridSize, cameraFovDeg, theme, sunPath, fitKey }: Props) {
+export function DiagramCanvas({ objects, selectedId, onSelect, onLive, onCommit, onTapSelected, snap, gridSize, cameraFovDeg, theme, sunPath, fitKey, planView = 'all', links }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ ox: 300, oy: 300, scale: 60 });
@@ -65,8 +68,8 @@ export function DiagramCanvas({ objects, selectedId, onSelect, onLive, onCommit,
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    draw(ctx, { objects, view, width: size.w, height: size.h, selectedId, gridSize, cameraFovDeg, theme, sunPath });
-  }, [objects, view, size, selectedId, gridSize, cameraFovDeg, theme, sunPath]);
+    draw(ctx, { objects, view, width: size.w, height: size.h, selectedId, gridSize, cameraFovDeg, theme, sunPath, planView, links });
+  }, [objects, view, size, selectedId, gridSize, cameraFovDeg, theme, sunPath, planView, links]);
 
   const snapVal = useCallback((v: number, step: number) => (snap ? Math.round(v / step) * step : v), [snap]);
 
@@ -97,7 +100,7 @@ export function DiagramCanvas({ objects, selectedId, onSelect, onLive, onCommit,
         }
       }
     }
-    const hit = hitTest(objs, v, p.x, p.y);
+    const hit = hitTest(objs, v, p.x, p.y, planView);
     if (hit) {
       onSelect(hit.id);
       mode.current = { kind: 'move', id: hit.id, sx: p.x, sy: p.y, ox: hit.x, oy: hit.y, moved: false };

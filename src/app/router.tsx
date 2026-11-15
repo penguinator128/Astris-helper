@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter, Navigate, useParams } from 'react-router';
 import { Shell } from './Shell';
 import Home from '@/modules/home/Home';
 import { RouteError } from './RouteError';
@@ -10,6 +10,11 @@ function lazyModule(loader: () => Promise<{ default: React.ComponentType }>) {
     const mod = await loader();
     return { Component: mod.default };
   };
+}
+
+function LegacyLight() {
+  const { id } = useParams();
+  return <Navigate to={`/plan/${id ?? ''}`} replace />;
 }
 
 function GateHome() {
@@ -26,9 +31,13 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <GateHome /> },
       { path: 'welcome', lazy: lazyModule(() => import('@/modules/settings/Onboarding')) },
-      { path: 'plan', lazy: lazyModule(() => import('@/modules/plan/Planner')) },
-      { path: 'light', lazy: lazyModule(() => import('@/modules/light/LightIndex')) },
-      { path: 'light/:id', lazy: lazyModule(() => import('@/modules/light/LightEditor')) },
+      { path: 'plan', lazy: lazyModule(() => import('@/modules/light/LightIndex')) },
+      { path: 'plan/:id', lazy: lazyModule(() => import('@/modules/light/LightEditor')) },
+      { path: 'gear', lazy: lazyModule(() => import('@/modules/gear/GearPage')) },
+      { path: 'sun', lazy: lazyModule(() => import('@/modules/plan/Planner')) },
+      { path: 'toolkit', lazy: lazyModule(() => import('@/modules/toolkit/Toolkit')) },
+      { path: 'light', element: <Navigate to="/plan" replace /> },
+      { path: 'light/:id', element: <LegacyLight /> },
       { path: 'frame', lazy: lazyModule(() => import('@/modules/frame/FrameIndex')) },
       { path: 'frame/:id', lazy: lazyModule(() => import('@/modules/frame/FrameEditor')) },
       { path: 'colour', lazy: lazyModule(() => import('@/modules/colour/ColourStudio')) },

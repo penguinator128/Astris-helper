@@ -27,7 +27,7 @@ export default function ColourStudio() {
   const project = useProject();
   return (
     <main className="page">
-      <PageHead index="04 · Colour" title="Colour Studio" sub="Palettes in OKLCH, extraction from stills, contrast checks and a colour script for the project." />
+      <PageHead index="Toolkit · Colour" title="Colour Studio" sub="Palettes in OKLCH, extraction from stills, contrast checks and a colour script for the project." />
       <div className="stack">
         <Tabs
           value={tab}

@@ -9,7 +9,7 @@ export default function CalcIndex() {
   const { camera, sensor } = useCamera();
   return (
     <main className="page">
-      <PageHead index="05 · Calculators" title="Calculators" sub={`Current camera: ${sensor.name}, ${camera.focalLength} mm, ${fmtAperture(camera.aperture)}. Changing it in any calculator updates the project.`} />
+      <PageHead index="Toolkit · Calculators" title="Calculators" sub={`Current camera: ${sensor.name}, ${camera.focalLength} mm, ${fmtAperture(camera.aperture)}. Changing it in any calculator updates the project.`} />
       <div className="rows">
         {CALCS.map((c) => (
           <Link key={c.id} to={`/calc/${c.id}`} className="row">

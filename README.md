@@ -4,22 +4,23 @@ A pocket film-production helper for **ASTRIS PRODUCTIONS**, a one-person film an
 
 It is an installable web app (PWA). Everything is stored on the device, and every tool works offline after the first visit.
 
-## Tools
+## How it is organised
 
-| No. | Tool | What it does |
+The **Shoot Plan** is the heart of the app. Everything else either feeds it or comes out of it.
+
+| No. | Section | What it does |
 | --- | --- | --- |
-| 01 | Sun and Moon Planner | Map with camera and subject pins, bearing and distance, sun and moon direction lines, a day scrubber, golden and blue hour, all three twilights, moonrise and moonset, phase, a month calendar, shadow length and saved plans. Typed coordinates work without a network. |
-| 02 | Lighting Diagram | Top-down plan with pan, zoom and snap. Subjects, camera with a field-of-view cone, walls, and twelve light and modifier types with power, kelvin, gel, size, height, tilt and spread. Undo and redo, lock, duplicate, nine presets, a sun-path overlay, key-to-fill ratio, exposure and colour-mix readouts, and a live three.js mannequin view from the camera or in orbit. |
-| 03 | Shot Designer | Frame canvas in seven aspect ratios with ten guides, draggable silhouettes and props, automatic shot-size labels, angle and movement, lens field of view and background blur, palette and reference-image overlays. Sends frames to the storyboard or shot list. |
-| 04 | Colour Studio | OKLCH harmonies and film looks around a must-have colour, palette extraction from a still (k-means, on device), a WCAG contrast checker and a per-scene colour script. |
-| 05 | Calculators | Eighteen calculators, each with a "How this is calculated" section. See below. |
-| 06 | Shot List | Table on desktop, cards on phones. Filter, sort, search, drag to reorder, bulk status, automatic numbering and CSV export. |
-| 07 | Storyboard | Frames from compositions, images or a vector sketch tool, with caption, dialogue, size, movement, lens, duration and shot links. Drag to reorder. |
-| 08 | Slate | Full-screen clapperboard with live time-of-day timecode, take counter, synthesised clap, flash, mirrored mode and screen wake lock. |
-| 09 | Astris Awards | Ceremonies, categories, nominees and winners, SVG trophy cards exported as PNG, and an envelope reveal. |
-| 10 | Call Sheet | Date, call time, location with a map link, a daylight summary from sun times, cast and crew, schedule and notes. |
-| 11 | Gear Checklist | Template groups (camera, lenses, audio, lighting, batteries, media, accessories), ticked off per project. |
-| 12 | Shoot Pack | Branded A4 PDF in portrait or landscape, PNG exports, and JSON backup and import. |
+| 01 | Shoot Plan | One top-down plan per set-up. Place talent, marks, cameras, monitors, lights, modifiers, mics, wireless, recorders, home base and other areas. Switch between **All, Camera, Lighting, Audio and Base** views; other layers dim. Connection lines show what plugs into what. Lighting readouts, a sun-path overlay and a live three.js view are built in. Each view exports as PNG. |
+| 02 | Gear | Your kit with names, make and model, quantity, power and every **input and output** (connector and signal). Connect an output to an input and the cable is worked out. The **equipment list builds itself** from your gear, the plan and the connections: stands, sandbags, cables, batteries, chargers, cards, headphones and home-base kit. CSV downloads, and one tap adds it to the packing checklist. |
+| 03 | Shot List | Scenes and shots with lens, movement, status, filters and CSV export. Shots link to set-ups. |
+| 04 | Storyboard | Frames from compositions, images or a sketch tool, with captions, dialogue and timing. |
+| 05 | Call Sheet | Date, call time, location with a map link, a daylight summary, cast and crew, schedule and notes. |
+| 06 | Packing Checklist | Tick off the generated equipment list and template groups as you pack. |
+| 07 | Shoot Pack | A4 PDF of everything: the plan for each set-up with all four department views, kit tables, equipment list, gear with inputs and outputs, connections, call sheet and more. Also PNG, CSV and JSON downloads. |
+
+### Toolkit
+
+Sun and Moon planner, eighteen calculators, Shot Designer, Colour Studio, Slate and Astris Awards live in the Toolkit tab.
 
 ### Calculators
 
@@ -85,13 +86,14 @@ All data lives in the browser's IndexedDB on the device: projects, settings and 
 - **Sun and moon:** SunCalc 2, which reports angles in degrees and supports a time-zone offset. Times are computed for the civil day in the chosen time zone (default `Australia/Sydney`).
 - **PDF fonts:** jsPDF needs TrueType, and fontsource ships WOFF. `scripts/woff-to-ttf.mjs` converts the self-hosted Inter Tight and IBM Plex Mono files at build time (`prebuild`), so PDF text is real, selectable vector text in the brand fonts. The same fonts are embedded when SVGs are rasterised, so award cards and frame PNGs match the app.
 - **Images:** replaced or orphaned images are cleaned up at start-up rather than deleted immediately, so duplicated and imported projects keep their images.
+- **Equipment list rules:** counts use the busiest set-up, because kit moves between set-ups. Each light or modifier needs a stand and each stand a sandbag; each camera position needs support; batteries are one per device plus a spare; cards are two per recording device. Every line says why it is there.
 - **Lighting maths:** a planning model, not a light meter. Illuminance falls off with the square of distance, light outside the beam falls to 10% spill, flags pass 8% and diffusion 55%, bounce cards return 60% of what reaches them, and light from behind the subject counts less at the face. Exposure is relative to a single 100% key at 2 m.
 - **Theme:** light by default, with an On-set dark theme. The device's colour-scheme preference is used only on first run.
 - **Units and copy:** metric by default with an imperial toggle, 24-hour time, Australian English.
 
 ## Verification
 
-- **Unit tests:** 72 tests across calculators, sun and moon, colour, photometry, shot-size classification, timecode, slate and backup helpers, including the reference values in the brief (hyperfocal 10.83 m, 39.6° horizontal FOV, 10-stop ND to 8.2 s, 1/48 s at 24 fps, 45 GB per hour at 100 Mbps).
+- **Unit tests:** 76 tests across calculators, sun and moon, colour, photometry, gear and the equipment list, shot-size classification, timecode, slate and backup helpers, including the reference values in the brief (hyperfocal 10.83 m, 39.6° horizontal FOV, 10-stop ND to 8.2 s, 1/48 s at 24 fps, 45 GB per hour at 100 Mbps).
 - **Accessibility:** axe-core reports no WCAG 2.1 AA or best-practice violations on any of the 25 routes, in both themes. Focus rings, keyboard reordering, a skip link, focus-trapped sheets and `aria-live` results are in place, and reduced motion is respected.
 - **Lighthouse 12 (home):** performance 94 on the simulated mobile profile and 100 on desktop; accessibility, best practices and SEO 100.
 - **PWA:** Lighthouse 12 no longer has a PWA category, so it was audited with Lighthouse 11.7.1: installable manifest, maskable icon, splash screen, themed address bar, viewport and content width all pass.

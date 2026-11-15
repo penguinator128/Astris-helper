@@ -80,8 +80,8 @@ export default function Checklist() {
   return (
     <main className="page">
       <PageHead
-        index="11 · Gear"
-        title="Gear Checklist"
+        index="06 · Packing"
+        title="Packing Checklist"
         sub={items.length ? `${done} of ${items.length} packed · ${pct}%` : 'Templated kit lists, ticked off per project.'}
         actions={
           <>

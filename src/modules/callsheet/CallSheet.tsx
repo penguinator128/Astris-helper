@@ -64,7 +64,7 @@ export default function CallSheet() {
   return (
     <main className="page">
       <PageHead
-        index="10 · Call"
+        index="05 · Call sheet"
         title="Call Sheet"
         sub={`${project.name} · ${fmtDate(parseIsoDate(cs.isoDate), undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
         actions={

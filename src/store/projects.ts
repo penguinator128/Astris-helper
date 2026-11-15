@@ -75,7 +75,19 @@ export function createEmptyProject(name: string): Project {
     checklist: [],
     awards: [],
     slate: emptySlate(name),
+    gear: [],
+    connections: [],
   };
+}
+
+/** Bring a stored or imported project up to the current shape. */
+export function migrateProject(p: Project): Project {
+  const base = createEmptyProject(p.name);
+  const out = { ...base, ...p, camera: { ...base.camera, ...p.camera }, callSheet: { ...base.callSheet, ...p.callSheet }, slate: { ...base.slate, ...p.slate } } as Project;
+  for (const key of ['shots', 'storyboard', 'diagrams', 'compositions', 'palettes', 'colourScript', 'plans', 'checklist', 'awards', 'gear', 'connections'] as const) {
+    if (!Array.isArray(out[key])) (out as unknown as Record<string, unknown>)[key] = [];
+  }
+  return out;
 }
 
 interface ProjectsStore {
@@ -115,7 +127,7 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   hydrate: async () => {
     const list = await dbGetAllProjects();
     const map: Record<string, Project> = {};
-    for (const p of list) map[p.id] = p;
+    for (const p of list) map[p.id] = migrateProject(p);
     let currentId = (await dbGetMeta<string>(CURRENT_KEY)) ?? null;
     if (list.length === 0) {
       const p = createEmptyProject('Untitled project');
@@ -180,7 +192,7 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   },
 
   importProject: (p) => {
-    const incoming: Project = { ...p, updatedAt: Date.now() };
+    const incoming: Project = { ...migrateProject(p), updatedAt: Date.now() };
     set((s) => ({ projects: { ...s.projects, [incoming.id]: incoming }, currentId: incoming.id }));
     void dbPutProject(incoming);
     void dbPutMeta(CURRENT_KEY, incoming.id);
@@ -222,6 +234,8 @@ function createEmptyProjectSafe(): Project {
     checklist: [],
     awards: [],
     slate: emptySlate('Untitled project'),
+    gear: [],
+    connections: [],
   };
 }
 
