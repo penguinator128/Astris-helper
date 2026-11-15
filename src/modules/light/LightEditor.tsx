@@ -243,13 +243,14 @@ function Editor({ initial }: { initial: LightingDiagram }) {
 
   return (
     <main className="page page--wide" ref={hostRef} onKeyDown={onKeyDown}>
-      <div className="page__head" style={{ alignItems: 'center' }}>
+      <div className="page__head page__head--editor">
         <div className="cluster" style={{ flexWrap: 'nowrap', minWidth: 0 }}>
           <Link to="/light" className="btn btn--ghost btn--sm btn--icon" aria-label="All diagrams">
             <ArrowLeft size={18} />
           </Link>
           <div style={{ minWidth: 0 }}>
             <span className="page__idx">02 · Light</span>
+            <h1 className="visually-hidden">{meta.name}</h1>
             <input className="input" aria-label="Diagram name" value={meta.name} onChange={(e) => setMeta({ ...meta, name: e.target.value })} style={{ fontWeight: 600, fontSize: 'var(--fs-20)', border: 0, padding: 0, minHeight: 32, background: 'transparent' }} />
           </div>
         </div>

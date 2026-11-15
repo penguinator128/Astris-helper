@@ -35,6 +35,19 @@ export function initialTheme(): Theme {
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
+function plainSettings(s: SettingsStore): Settings {
+  const { hydrated: _h, hydrate: _hy, update: _u, setTheme: _st, ...plain } = s;
+  return plain as Settings;
+}
+
+/** Write any pending settings change now (used on page hide). */
+export function flushSettings(): Promise<void> | void {
+  if (!persistTimer) return;
+  clearTimeout(persistTimer);
+  persistTimer = null;
+  return dbPutSettings(plainSettings(useSettings.getState()));
+}
+
 export const useSettings = create<SettingsStore>((set, get) => ({
   ...DEFAULT_SETTINGS,
   theme: typeof window !== 'undefined' ? initialTheme() : 'light',
@@ -56,10 +69,15 @@ export const useSettings = create<SettingsStore>((set, get) => ({
     set(patch);
     if (patch.theme) applyTheme(patch.theme);
     if (persistTimer) clearTimeout(persistTimer);
+    // One-off choices save straight away; rapid edits (sliders, typing) are batched.
+    if ('onboardingDone' in patch || 'theme' in patch || 'units' in patch || 'timeFormat' in patch) {
+      persistTimer = null;
+      void dbPutSettings(plainSettings(get()));
+      return;
+    }
     persistTimer = setTimeout(() => {
-      const s = get();
-      const { hydrated: _h, hydrate: _hy, update: _u, setTheme: _st, ...plain } = s;
-      void dbPutSettings(plain as Settings);
+      persistTimer = null;
+      void dbPutSettings(plainSettings(get()));
     }, 150);
   },
   setTheme: (theme) => get().update({ theme }),

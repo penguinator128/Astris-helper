@@ -1,4 +1,23 @@
 /* ---------- App shell ---------- */
+.skip-link {
+  position: fixed;
+  left: var(--s-2);
+  top: var(--s-2);
+  z-index: 100;
+  padding: var(--s-2) var(--s-4);
+  background: var(--yellow);
+  color: var(--ink);
+  font-weight: 600;
+  border-radius: var(--r-2);
+  transform: translateY(-200%);
+  transition: transform var(--t-fast) var(--ease);
+}
+.skip-link:focus-visible {
+  transform: none;
+}
+.shell__main:focus {
+  outline: none;
+}
 .shell {
   min-height: 100dvh;
   display: flex;
@@ -51,6 +70,22 @@
   display: flex;
   gap: var(--s-2);
   flex-shrink: 0;
+}
+.page__head--editor {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: var(--s-2);
+}
+.page__head--editor > :first-child {
+  flex: 1 1 220px;
+}
+@media (max-width: 600px) {
+  .page__head--editor .page__actions {
+    width: 100%;
+  }
+  .page__head--editor .page__actions .btn {
+    flex: 1 1 0;
+  }
 }
 
 /* ---------- Top header (mobile) ---------- */

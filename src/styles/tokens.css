@@ -19,7 +19,7 @@
   --bg-3: #e9e6dc;
   --fg: var(--ink);
   --fg-2: #4a4a4c;
-  --fg-3: #7a7a7c;
+  --fg-3: #666668;
   --hair: var(--line);
   --hair-strong: #b9b5a8;
   --accent: var(--yellow);
@@ -89,7 +89,7 @@
   --bg-3: #1f1f21;
   --fg: #f3f1ea;
   --fg-2: #b8b6ae;
-  --fg-3: #85837c;
+  --fg-3: #94928b;
   --hair: var(--line-dark);
   --hair-strong: #3d3d40;
   --accent: var(--yellow);

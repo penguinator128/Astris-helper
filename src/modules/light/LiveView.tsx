@@ -298,5 +298,5 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
       </div>
     );
   }
-  return <div ref={hostRef} className="live-view" aria-label={mode === 'camera' ? 'Live preview from the camera position' : 'Live preview, orbit view'} />;
+  return <div ref={hostRef} className="live-view" role="img" aria-label={mode === 'camera' ? 'Live preview from the camera position' : 'Live preview, orbit view'} />;
 }

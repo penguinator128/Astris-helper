@@ -299,12 +299,14 @@ function Card({ shot, selected, onToggle, onOpen, onStatus, canReorder }: Omit<R
       <button type="button" className="drag-handle" ref={setActivatorNodeRef} {...attributes} {...listeners} aria-label={`Reorder shot ${shot.scene}${shot.shotNumber}`} disabled={!canReorder}>
         <GripVertical size={16} />
       </button>
-      <button type="button" className="shot-card__num" onClick={onOpen} aria-label={`Edit shot ${shot.scene}${shot.shotNumber}`}>
+      <button type="button" className="shot-card__num" onClick={onOpen}>
+        <span className="visually-hidden">Edit shot </span>
         {shot.scene}
         {shot.shotNumber}
         <small>{shot.size || '—'}</small>
       </button>
-      <button type="button" className="shot-card__body" onClick={onOpen} style={{ textAlign: 'left' }}>
+      <div className="shot-card__body">
+        <button type="button" onClick={onOpen} style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span className="shot-card__desc">{shot.description || 'Untitled shot'}</span>
         <span className="shot-card__meta">
           {shot.angle && <span>{angleLabel(shot.angle)}</span>}
@@ -314,8 +316,9 @@ function Card({ shot, selected, onToggle, onOpen, onStatus, canReorder }: Omit<R
           {shot.fps && <span>{shot.fps} fps</span>}
           {shot.location && <span>{shot.location}</span>}
         </span>
+        </button>
         <Links shot={shot} />
-      </button>
+      </div>
       <div className="stack stack--sm" style={{ alignItems: 'flex-end' }}>
         <input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select shot ${shot.scene}${shot.shotNumber}`} />
         <StatusSelect value={shot.status} onChange={onStatus} />

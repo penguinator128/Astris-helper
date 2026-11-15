@@ -530,8 +530,16 @@ input[type='radio'] {
   letter-spacing: var(--track-wide);
   color: var(--fg-3);
 }
-.bp--yellow .readout__label {
-  color: rgba(11, 11, 12, 0.7);
+.bp--yellow .readout__label,
+.bp--yellow .micro,
+.bp--yellow .muted,
+.bp--yellow .field__hint {
+  color: rgba(11, 11, 12, 0.74);
+}
+.bp--ink .muted,
+.bp--ink .micro,
+.bp--ink .field__hint {
+  color: #a7a59d;
 }
 .bp--ink .readout__label {
   color: #a7a59d;

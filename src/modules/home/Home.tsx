@@ -23,6 +23,7 @@ export default function Home() {
 
   return (
     <main className="page page--flush">
+      <h1 className="visually-hidden">Astris Field Kit</h1>
       <section className="home-head grain" aria-label="Today">
         <div className="home-head__inner">
           <div className="home-head__brand">

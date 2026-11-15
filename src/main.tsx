@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/index.css';
 import App from './App';
-import { useSettings, applyTheme, initialTheme } from './store/settings';
+import { useSettings, applyTheme, initialTheme, flushSettings } from './store/settings';
 import { useProjects, flushProjects } from './store/projects';
 import { collectUnusedImages } from './lib/backup';
 
@@ -26,8 +26,14 @@ async function boot() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') void flushProjects();
+  if (document.visibilityState === 'hidden') {
+    void flushProjects();
+    void flushSettings();
+  }
 });
-window.addEventListener('pagehide', () => void flushProjects());
+window.addEventListener('pagehide', () => {
+  void flushProjects();
+  void flushSettings();
+});
 
 void boot();

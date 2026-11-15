@@ -19,8 +19,8 @@ export function Swatch({ hex, name, onSelect, compact }: Props) {
     onSelect?.(d.hex);
   }
   return (
-    <button type="button" className="swatch swatch-btn" onClick={copy} aria-label={`${name ?? d.hex}, copy hex`}>
-      <div className="swatch__chip" style={{ background: hex, color: dark ? '#fff' : '#0b0b0c' }}>
+    <button type="button" className="swatch swatch-btn" onClick={copy} title={`Copy ${d.hex}`}>
+      <div className="swatch__chip" style={{ background: hex, color: dark ? '#fff' : '#000' }}>
         {name && (
           <span className="tiny" style={{ display: 'block', padding: 6, fontWeight: 500 }}>
             {name}
@@ -46,6 +46,7 @@ export function Swatch({ hex, name, onSelect, compact }: Props) {
           </>
         )}
       </div>
+      <span className="visually-hidden">Copy hex</span>
     </button>
   );
 }

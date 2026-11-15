@@ -220,13 +220,14 @@ function Editor({ initial }: { initial: Composition }) {
 
   return (
     <main className="page page--wide">
-      <div className="page__head" style={{ alignItems: 'center' }}>
+      <div className="page__head page__head--editor">
         <div className="cluster" style={{ flexWrap: 'nowrap', minWidth: 0 }}>
           <Link to="/frame" className="btn btn--ghost btn--sm btn--icon" aria-label="All frames">
             <ArrowLeft size={18} />
           </Link>
           <div style={{ minWidth: 0 }}>
             <span className="page__idx">03 · Frame</span>
+            <h1 className="visually-hidden">{comp.name}</h1>
             <input className="input" aria-label="Frame name" value={comp.name} onChange={(e) => update({ name: e.target.value })} style={{ fontWeight: 600, fontSize: 'var(--fs-20)', border: 0, padding: 0, minHeight: 32, background: 'transparent' }} />
           </div>
         </div>

@@ -55,15 +55,5 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/three')) return 'three';
-          if (id.includes('node_modules/jspdf')) return 'jspdf';
-          if (id.includes('node_modules/leaflet')) return 'leaflet';
-          return undefined;
-        },
-      },
-    },
   },
 });

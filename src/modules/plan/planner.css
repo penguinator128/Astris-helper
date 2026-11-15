@@ -72,18 +72,18 @@
   display: inline-block;
   width: 18px;
   height: 0;
-  border-top: 2px solid currentColor;
+  border-top: 2px solid var(--swatch, currentColor);
   margin-right: 6px;
   vertical-align: middle;
 }
 .plan-legend .sun {
-  color: #e0ab00;
+  --swatch: #e0ab00;
 }
 .plan-legend .moon {
-  color: #6f7fa8;
+  --swatch: #6f7fa8;
 }
 .plan-legend .shot {
-  color: var(--fg);
+  --swatch: var(--fg);
 }
 .plan-legend .set::before {
   border-top-style: dashed;
@@ -137,8 +137,14 @@
   color: var(--fg);
   font-weight: 500;
 }
+.time-row--hi {
+  background: var(--accent-wash);
+  box-shadow: 0 0 0 4px var(--accent-wash);
+  border-left: 2px solid var(--accent);
+  padding-left: 4px;
+}
 .time-row--hi .time-row__label {
-  color: var(--yellow-deep);
+  color: var(--fg-2);
 }
 .scrub {
   position: relative;

@@ -76,6 +76,22 @@ export default function Slate() {
     return () => document.documentElement.removeAttribute('data-immersive');
   }, []);
 
+  // Space bar claps when nothing else has focus (also works with presentation clickers).
+  const clapRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    clapRef.current = clap;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === ' ' && (document.activeElement === document.body || document.activeElement == null)) {
+        e.preventDefault();
+        clapRef.current();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   function clap() {
     if (clapping) return;
     audioContext();
@@ -97,7 +113,8 @@ export default function Slate() {
   const today = fmtDate(new Date(), undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 
   return (
-    <div className="slate-page">
+    <main className="slate-page">
+      <h1 className="visually-hidden">Slate</h1>
       <div className="slate-top">
         <Link to="/" className="btn btn--sm btn--ghost" style={{ color: '#f3f1ea' }}>
           <ArrowLeft size={16} /> Exit slate
@@ -121,19 +138,8 @@ export default function Slate() {
       </div>
 
       <div className="slate-wrap">
-        <div
-          className={`slate grain ${slate.mirrored ? 'is-mirrored' : ''} ${clapping ? 'is-clapping' : ''}`}
-          role="button"
-          tabIndex={0}
-          aria-label={`Clapperboard. Scene ${slate.scene}, shot ${slate.shot}, take ${slate.take}. Tap to clap.`}
-          onClick={clap}
-          onKeyDown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.preventDefault();
-              clap();
-            }
-          }}
-        >
+        {/* The whole board is a tap target for pointer users; keyboard users use the Clap button or the space bar. */}
+        <div className={`slate grain ${slate.mirrored ? 'is-mirrored' : ''} ${clapping ? 'is-clapping' : ''}`} onClick={clap}>
           <div className="slate__arm">
             <span className="slate__hinge" aria-hidden="true" />
           </div>
@@ -208,6 +214,9 @@ export default function Slate() {
       </div>
 
       <div key={flash} className={`slate__flash ${flash ? 'is-on' : ''}`} aria-hidden="true" />
+      <p className="visually-hidden" aria-live="polite">
+        Scene {slate.scene}, shot {slate.shot}, take {slate.take}
+      </p>
 
       <Sheet open={editing} onClose={() => setEditing(false)} title="Slate details">
         <div className="stack">
@@ -230,6 +239,6 @@ export default function Slate() {
           <p className="tiny muted">Timecode is free-run time of day at the chosen frame rate, for logging. Keep the screen awake is on while the slate is open.</p>
         </div>
       </Sheet>
-    </div>
+    </main>
   );
 }

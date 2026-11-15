@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { ChevronDown, MoreHorizontal, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
 import { TAB_TOOLS, MORE_TOOLS, TOOLS, UTILITY_NAV } from './nav';
 import { Wordmark, StarMark } from '@/brand/Wordmark';
@@ -20,6 +20,10 @@ export function Shell() {
 
   return (
     <div className="shell">
+      <a href="#content" className="skip-link">
+        Skip to content
+      </a>
+      <ScrollRestoration />
       {!immersive && (
         <nav className="rail" aria-label="Tools">
           <Link to="/" className="rail__brand">
@@ -54,12 +58,13 @@ export function Shell() {
         </nav>
       )}
 
-      <div className="shell__main" style={immersive ? { paddingBottom: 0 } : undefined}>
+      <div className="shell__main" id="content" tabIndex={-1} style={immersive ? { paddingBottom: 0 } : undefined}>
         {!immersive && (
           <header className="topbar">
-            <Link to="/" className="topbar__brand" aria-label="Home">
+            <Link to="/" className="topbar__brand">
               <StarMark size={20} />
               <span style={{ fontWeight: 600, letterSpacing: '0.18em', fontSize: 12, textTransform: 'uppercase' }}>Astris</span>
+              <span className="visually-hidden">, tool index</span>
             </Link>
             <button type="button" className="topbar__project" onClick={() => setSwitcher(true)} aria-haspopup="dialog">
               <span>{project.name}</span>
