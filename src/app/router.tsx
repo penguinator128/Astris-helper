@@ -34,6 +34,7 @@ export const router = createBrowserRouter([
       { path: 'plan', lazy: lazyModule(() => import('@/modules/light/LightIndex')) },
       { path: 'plan/:id', lazy: lazyModule(() => import('@/modules/light/LightEditor')) },
       { path: 'cameras', lazy: lazyModule(() => import('@/modules/cameras/CamerasPage')) },
+      { path: 'rig/:id', lazy: lazyModule(() => import('@/modules/rig/RigBuilder')) },
       { path: 'gear', lazy: lazyModule(() => import('@/modules/gear/GearPage')) },
       { path: 'sun', lazy: lazyModule(() => import('@/modules/plan/Planner')) },
       { path: 'toolkit', lazy: lazyModule(() => import('@/modules/toolkit/Toolkit')) },
