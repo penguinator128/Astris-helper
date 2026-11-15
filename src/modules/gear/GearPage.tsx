@@ -20,7 +20,7 @@ import type { Connector, GearCategory, GearItem, GearPort, SignalKind } from '@/
 import { ConnectSheet } from './ConnectSheet';
 import './gear.css';
 
-const SIGNAL_COLOUR: Record<SignalKind, string> = { audio: '#3f6fa0', video: '#e0ab00', timecode: '#7a7a7c', power: '#b3261e', data: '#4a4a4c' };
+const SIGNAL_COLOUR: Record<SignalKind, string> = { audio: '#3f6fa0', video: '#e0ab00', timecode: '#7a7a7c', power: '#b3261e', data: '#4a4a4c', mount: '#0b0b0c' };
 
 type Tab = 'gear' | 'connections' | 'equipment';
 

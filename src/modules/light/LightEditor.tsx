@@ -13,6 +13,7 @@ import { Sheet } from '@/components/Sheet';
 import { Expander, Formula } from '@/components/Expander';
 import { useProject, useProjects } from '@/store/projects';
 import { useSettings } from '@/store/settings';
+import { cameraConfig } from '@/lib/camera/settings';
 import { toast } from '@/store/toast';
 import { uid } from '@/lib/id';
 import { useMedia } from '@/lib/useMedia';
@@ -84,6 +85,11 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   const links = useMemo(() => planLinks(objects, project.gear, project.connections), [objects, project.gear, project.connections]);
   const placedGear = new Set(objects.map((o) => ('gearId' in o ? o.gearId : undefined)).filter(Boolean) as string[]);
   const selected = objects.find((o) => o.id === selectedId) ?? null;
+  // Look through the selected camera, or the first one; with real settings when it is a camera from Gear.
+  const camObjs = objects.filter((o) => o.type === 'camera');
+  const lookCam = (selected?.type === 'camera' ? selected : undefined) ?? camObjs.find((o) => 'gearId' in o && o.gearId) ?? camObjs[0];
+  const lookGear = lookCam && 'gearId' in lookCam ? project.gear.find((g) => g.id === lookCam.gearId) : undefined;
+  const lookConfig = lookGear?.category === 'camera' ? cameraConfig(lookGear) : undefined;
 
   /* ---------- persistence ---------- */
   const first = useRef(true);
@@ -416,7 +422,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
             </div>
             {showLive && (
               <Suspense fallback={<div className="live-view live-view--off">Loading 3D view…</div>}>
-                <LiveView objects={objects} mode={liveMode} verticalFovDeg={fov.vertical} />
+                <LiveView objects={objects} mode={liveMode} verticalFovDeg={fov.vertical} cameraObjectId={lookCam?.id} config={lookConfig} />
               </Suspense>
             )}
           </div>

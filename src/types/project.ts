@@ -233,7 +233,25 @@ export type DiagramObject = DiagramSubject | DiagramCamera | DiagramWall | Diagr
 
 /* ---------- Gear inventory, inputs and outputs ---------- */
 
-export type GearCategory = 'camera' | 'lens' | 'monitor' | 'mic' | 'wireless' | 'recorder' | 'audio-acc' | 'light' | 'grip' | 'power' | 'media' | 'other';
+export type GearCategory =
+  | 'camera'
+  | 'lens'
+  | 'adapter'
+  | 'rigging'
+  | 'filter'
+  | 'support'
+  | 'monitor'
+  | 'mic'
+  | 'wireless'
+  | 'recorder'
+  | 'audio-acc'
+  | 'light'
+  | 'grip'
+  | 'battery'
+  | 'power'
+  | 'cable'
+  | 'media'
+  | 'other';
 
 export type Connector =
   | 'XLR'
@@ -251,9 +269,20 @@ export type Connector =
   | 'Mains'
   | 'DC barrel'
   | 'D-tap'
+  | 'Mini XLR'
+  | 'Lens mount'
+  | 'Filter thread'
+  | 'Filter tray'
+  | 'Battery plate'
+  | 'NATO'
+  | 'Cold shoe'
+  | '1/4-20'
+  | '15 mm rods'
+  | 'Focus ring'
+  | 'Mic mount'
   | 'Other';
 
-export type SignalKind = 'audio' | 'video' | 'timecode' | 'power' | 'data';
+export type SignalKind = 'audio' | 'video' | 'timecode' | 'power' | 'data' | 'mount';
 
 export interface GearPort {
   id: string;
@@ -261,6 +290,78 @@ export interface GearPort {
   dir: 'in' | 'out';
   connector: Connector;
   signal: SignalKind;
+  /** Mount, battery or wireless standard: 'RF', '82 mm', 'NP-F', 'V-mount', 'RF 2.4 GHz'. */
+  standard?: string;
+  /** On an input: supplies 48 V phantom. On an output: the mic needs phantom. */
+  phantom?: boolean;
+  /** Accepted voltage range on a power input. */
+  vMin?: number;
+  vMax?: number;
+  /** Voltage supplied by a power output. */
+  vOut?: number;
+}
+
+export interface GearSpec {
+  label: string;
+  value: string;
+}
+
+export interface LensSpec {
+  manufacturer: string;
+  model: string;
+  mount: string;
+  focalMin: number;
+  focalMax: number;
+  /** Widest aperture at the short end and at the long end (same for constant-aperture lenses). */
+  maxAperture: number;
+  maxApertureTele: number;
+  minAperture: number;
+  minFocus: number; // metres
+  filterThread: number; // mm, 0 if none
+}
+
+export type FocusMode = 'MF' | 'AF-S' | 'AF-C' | 'Face and eye AF';
+
+export interface CameraConfig {
+  bodyId: string;
+  manufacturer: string;
+  model: string;
+  mount: string;
+  sensorId: string;
+  lensGearId?: string;
+  focalLength: number;
+  aperture: number;
+  shutterMode: 'angle' | 'speed';
+  shutterAngle: number;
+  shutterSpeed: number; // seconds
+  iso: number;
+  ei: number;
+  kelvin: number;
+  tint: number; // + magenta, - green
+  focusMode: FocusMode;
+  focusDistance: number; // metres
+  resolution: string;
+  fps: number;
+  codec: string;
+  format: string;
+  profile: string;
+  colourSpace: string;
+  bitDepth: string;
+  chroma: string;
+  stabilisation: string;
+  monitorLut: boolean;
+  height: number; // lens height above the floor, metres
+  tilt: number; // degrees, negative looks down
+  panSpeed: number; // degrees per second, for the motion-blur simulation
+  subjectSpeed: number; // metres per second across frame
+  notes: string;
+}
+
+export interface RigPos {
+  x: number;
+  y: number;
+  z: number;
+  ry: number;
 }
 
 export interface GearItem {
@@ -272,6 +373,16 @@ export interface GearItem {
   power: string; // battery type or 'Mains', '' if none
   ports: GearPort[];
   notes: string;
+  /** Kind of physical part, used for compatibility and the 3D rig (e.g. 'cage', 'top-handle', 'body-cinema'). */
+  rigKind?: string;
+  /** The camera this item is rigged to. */
+  rigOf?: string;
+  rigPos?: RigPos;
+  specs?: GearSpec[];
+  weightKg?: number;
+  payloadKg?: number;
+  camera?: CameraConfig;
+  lens?: LensSpec;
 }
 
 /** A cable or wireless link from one item's output to another item's input. */

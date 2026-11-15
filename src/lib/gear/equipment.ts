@@ -127,19 +127,28 @@ export function equipmentList(project: Project): EquipRow[] {
   if (standPeak > 0) rows.push({ group: 'Grip and support', name: 'Sandbag', qty: standPeak, why: 'One per stand' });
   for (const [name, { n }] of peak(zones)) rows.push({ group: 'Base', name, qty: n, why: `For the ${ZONE_KINDS.find((z) => ZONE_KIT[z.id]?.some(([x]) => x === name))?.label.toLowerCase() ?? 'area'} on the plan` });
 
-  // 3. Cables from the connection list.
-  for (const [name, n] of cablesFor(project.gear, project.connections)) rows.push({ group: 'Cables and adaptors', name, qty: n, why: 'From the connection list' });
+  // 3. Cables from the connection list, less any already on the gear list.
+  for (const [name, n] of cablesFor(project.gear, project.connections)) {
+    const owned = project.gear.filter((g) => g.category === 'cable' && g.name.toLowerCase() === name.toLowerCase()).reduce((a, g) => a + g.qty, 0);
+    if (n > owned) rows.push({ group: 'Cables and adaptors', name, qty: n - owned, why: owned ? `Connections need ${n}; your gear list has ${owned}` : 'From the connection list' });
+  }
 
   // 4. Batteries, mains power and media.
   const byPower = new Map<string, number>();
   let mains = 0;
   for (const g of project.gear) {
+    if (g.category === 'battery' || g.category === 'cable') continue;
     const p = g.power.trim();
     if (!p || /^(internal|phantom|plug-in)/i.test(p)) continue;
     if (/^mains$/i.test(p)) mains += g.qty;
     else byPower.set(p, (byPower.get(p) ?? 0) + Math.max(1, g.qty));
   }
-  for (const [type, n] of byPower) rows.push({ group: 'Power', name: `${type} battery`, qty: n * 2, why: `${n} device${n === 1 ? '' : 's'}: one in each and one spare` });
+  const ownedBatteries = (type: string) => project.gear.filter((g) => g.category === 'battery' && g.ports.some((p) => p.connector === 'Battery plate' && p.standard === type)).reduce((a, g) => a + g.qty, 0);
+  for (const [type, n] of byPower) {
+    if (/^(camera battery|aa)$/i.test(type) === false && ownedBatteries(type) >= n * 2) continue;
+    const owned = ownedBatteries(type);
+    rows.push({ group: 'Power', name: `${type} battery`, qty: Math.max(0, n * 2 - owned), why: owned ? `${n} device${n === 1 ? '' : 's'} need ${n * 2} (one in each and a spare); you list ${owned}` : `${n} device${n === 1 ? '' : 's'}: one in each and one spare` });
+  }
   if (byPower.size) rows.push({ group: 'Power', name: 'Battery chargers', qty: byPower.size, why: 'One per battery type' });
   if (mains > 0) {
     rows.push({ group: 'Power', name: 'Power board', qty: Math.ceil(mains / 4), why: `${mains} mains device${mains === 1 ? '' : 's'}` });

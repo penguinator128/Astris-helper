@@ -34,14 +34,14 @@ describe('gear catalogue', () => {
 describe('equipment list', () => {
   it('adds cables, batteries, cards, stands and headphones', () => {
     const p = createEmptyProject('Test');
-    const cam = gearFromTemplate(tpl('canon-r50v'));
+    const cam = gearFromTemplate(tpl('body-canon-r50v'));
     const rec = gearFromTemplate(tpl('recorder-4'));
     const shotgun = gearFromTemplate(tpl('shotgun'));
-    const monitor = gearFromTemplate(tpl('monitor'));
+    const monitor = gearFromTemplate(tpl('monitor-5'));
     p.gear = [cam, rec, shotgun, monitor];
     p.connections = [
       { id: 'c1', fromGear: shotgun.id, fromPort: shotgun.ports[0].id, toGear: rec.id, toPort: rec.ports[0].id, notes: '' },
-      { id: 'c2', fromGear: cam.id, fromPort: cam.ports.find((x) => x.connector === 'Micro HDMI')!.id, toGear: monitor.id, toPort: monitor.ports[0].id, notes: '' },
+      { id: 'c2', fromGear: cam.id, fromPort: cam.ports.find((x) => x.connector === 'Micro HDMI')!.id, toGear: monitor.id, toPort: monitor.ports.find((x) => x.connector === 'HDMI' && x.dir === 'in')!.id, notes: '' },
     ];
     const light = (kind: string, id: string): DiagramObject => ({ id, type: 'light', kind, x: 0, y: 0, rotation: 0, locked: false, label: kind, power: 100, kelvin: 5600, size: 1, height: 2, tilt: 0, gel: '', spread: 60 }) as DiagramObject;
     const d1: LightingDiagram = { id: 'd1', name: 'Scene 1', gridSize: 1, showSunPath: false, notes: '', updatedAt: 0, objects: [light('key', 'a'), light('fill', 'b'), light('flag', 'c'), { id: 'cam', type: 'camera', gearId: cam.id, x: 0, y: -3, rotation: 0, locked: false, label: 'A cam' }] };

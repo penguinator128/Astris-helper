@@ -79,3 +79,15 @@
   color: var(--fg-2);
   font-size: var(--fs-12);
 }
+.ac-row {
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--hair);
+}
+.ac-row .check {
+  align-items: flex-start;
+}
+.ac-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

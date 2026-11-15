@@ -39,6 +39,7 @@ const LINK_STYLE: Record<SignalKind, { colour: string; dash: number[] }> = {
   timecode: { colour: '#7a7a7c', dash: [2, 3] },
   power: { colour: '#b3261e', dash: [2, 4] },
   data: { colour: '#7a7a7c', dash: [8, 3] },
+  mount: { colour: '#0b0b0c', dash: [1, 3] },
 };
 
 export const HANDLE_DIST = 42; // px from object centre to the rotate handle

@@ -20,6 +20,10 @@ export const SENSORS: Sensor[] = [
   { id: 'super35', name: 'Super 35', width: 24.89, height: 18.66, crop: 1.39, pixelPitch: 5.5, group: 'preset' },
   { id: 'mft', name: 'Micro Four Thirds', width: 17.3, height: 13, crop: 2.0, pixelPitch: 3.3, group: 'preset' },
   { id: 'one-inch', name: '1-inch', width: 13.2, height: 8.8, crop: 2.7, pixelPitch: 2.4, group: 'preset' },
+  { id: 'fuji-apsc', name: 'Fujifilm APS-C', width: 23.5, height: 15.6, crop: 1.53, pixelPitch: 3.0, group: 'preset' },
+  { id: 'c70-s35', name: 'Canon Super 35 (DGO)', width: 26.2, height: 13.8, crop: 1.45, pixelPitch: 6.4, group: 'preset' },
+  { id: 'bmd-s35', name: 'Blackmagic Super 35', width: 23.1, height: 12.99, crop: 1.56, pixelPitch: 3.8, group: 'preset' },
+  { id: 'bmd-mft', name: 'Blackmagic 4/3', width: 18.96, height: 10, crop: 2.0, pixelPitch: 4.6, group: 'preset' },
 ];
 
 export function getSensor(id: string, custom?: { width: number; height: number; name: string }): Sensor {

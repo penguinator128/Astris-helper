@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { DiagramObject, DiagramLight } from '@/types/project';
+import type { CameraConfig, DiagramObject, DiagramLight } from '@/types/project';
+import { applyGrade, gradeMaterial } from './grade';
+import { derive } from '@/lib/camera/settings';
 import { EMITTING, evaluate, findSubject, illuminanceAt } from '@/lib/light/photometry';
 import { kelvinToRgb } from '@/lib/colour/kelvin';
 
@@ -9,6 +11,10 @@ interface Props {
   objects: DiagramObject[];
   mode: 'camera' | 'orbit';
   verticalFovDeg: number;
+  /** Which camera on the plan to look through, and its settings. With settings, the view becomes a simulated camera image. */
+  cameraObjectId?: string;
+  config?: CameraConfig;
+  className?: string;
 }
 
 /** Diagram space (x right, y up on the plan, z height) -> three (x right, y up, z towards viewer): three = (x, z, -y). */
@@ -54,8 +60,10 @@ function buildMannequin(): THREE.Group {
   return g;
 }
 
-export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
+export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId, config, className = '' }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const sizeRef = useRef({ w: 800, h: 450 });
+  const [sizeTick, setSizeTick] = useState(0);
   const stateRef = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
@@ -65,6 +73,7 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     lightGroup: THREE.Group;
     kitGroup: THREE.Group;
     workLight: THREE.HemisphereLight;
+    post: { rt: THREE.WebGLRenderTarget; quad: THREE.Scene; quadCam: THREE.OrthographicCamera; mat: THREE.ShaderMaterial; on: boolean };
     render: () => void;
   } | null>(null);
   const [unsupported] = useState(() => {
@@ -123,6 +132,16 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     controls.maxDistance = 32;
     controls.maxPolarAngle = Math.PI * 0.52;
 
+    // Simulated camera image: linear render with depth, then one grading pass.
+    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(4, 4) });
+    const mat = gradeMaterial();
+    mat.uniforms.tColor.value = rt.texture;
+    mat.uniforms.tDepth.value = rt.depthTexture;
+    const quad = new THREE.Scene();
+    quad.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
+    const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const post = { rt, quad, quadCam, mat, on: false };
+
     let raf = 0;
     let dirty = true;
     const render = () => {
@@ -132,7 +151,12 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
       raf = requestAnimationFrame(loop);
       const moved = controls.update();
       if (dirty || moved) {
-        renderer.render(scene, camera);
+        if (post.on) {
+          renderer.setRenderTarget(rt);
+          renderer.render(scene, camera);
+          renderer.setRenderTarget(null);
+          renderer.render(quad, quadCam);
+        } else renderer.render(scene, camera);
         dirty = false;
       }
     };
@@ -142,17 +166,24 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
       const h = host.clientHeight;
       if (w === 0 || h === 0) return;
       renderer.setSize(w, h, false);
+      const dpr = renderer.getPixelRatio();
+      rt.setSize(Math.round(w * dpr), Math.round(h * dpr));
+      mat.uniforms.resolution.value.set(Math.round(w * dpr), Math.round(h * dpr));
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      sizeRef.current = { w: Math.round(w * dpr), h: Math.round(h * dpr) };
+      setSizeTick((n) => n + 1);
       render();
     });
     ro.observe(host);
     loop();
-    stateRef.current = { renderer, scene, camera, controls, mannequin, lightGroup, kitGroup, workLight, render };
+    stateRef.current = { renderer, scene, camera, controls, mannequin, lightGroup, kitGroup, workLight, post, render };
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
       controls.dispose();
+      rt.dispose();
+      mat.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       stateRef.current = null;
@@ -415,12 +446,27 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     const st = stateRef.current;
     if (!st) return;
     const { camera, controls } = st;
-    const cam = objects.find((o) => o.type === 'camera');
+    const cam = objects.find((o) => o.type === 'camera' && (!cameraObjectId || o.id === cameraObjectId)) ?? objects.find((o) => o.type === 'camera');
     const subject = findSubject(objects);
-    const target = toThree(subject?.x ?? 0, subject?.y ?? 0, 1.45);
+    let target = toThree(subject?.x ?? 0, subject?.y ?? 0, 1.45);
+    st.post.on = mode === 'camera' && !!cam && !!config;
     if (mode === 'camera' && cam) {
-      camera.fov = Math.max(5, Math.min(120, verticalFovDeg));
-      camera.position.copy(toThree(cam.x, cam.y, 1.5));
+      if (config) {
+        // True framing: horizontal angle from the sensor and focal length, the lens height and tilt from the settings.
+        const d = derive(config, sizeRef.current.w);
+        const aspect = camera.aspect || 16 / 9;
+        camera.fov = (2 * Math.atan(Math.tan((d.hfov * Math.PI) / 360) / aspect) * 180) / Math.PI;
+        camera.position.copy(toThree(cam.x, cam.y, config.height));
+        const r = THREE.MathUtils.degToRad(cam.rotation);
+        const t = THREE.MathUtils.degToRad(config.tilt);
+        target = camera.position.clone().add(new THREE.Vector3(Math.sin(r) * Math.cos(t), Math.sin(t), -Math.cos(r) * Math.cos(t)));
+        applyGrade(st.post.mat, config, sizeRef.current.w);
+        st.post.mat.uniforms.cameraNear.value = camera.near;
+        st.post.mat.uniforms.cameraFar.value = camera.far;
+      } else {
+        camera.fov = Math.max(5, Math.min(120, verticalFovDeg));
+        camera.position.copy(toThree(cam.x, cam.y, 1.5));
+      }
       controls.target.copy(target);
       controls.enabled = false;
     } else {
@@ -440,7 +486,7 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     camera.updateProjectionMatrix();
     controls.update();
     st.render();
-  }, [mode, objects, verticalFovDeg]);
+  }, [mode, objects, verticalFovDeg, cameraObjectId, config, sizeTick]);
 
   if (unsupported) {
     return (
@@ -449,5 +495,5 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
       </div>
     );
   }
-  return <div ref={hostRef} className="live-view" role="img" aria-label={mode === 'camera' ? 'Live preview from the camera position' : 'Live preview, orbit view'} />;
+  return <div ref={hostRef} className={`live-view ${className}`} role="img" aria-label={mode === 'camera' ? 'Live preview from the camera position' : 'Live preview, orbit view'} />;
 }
