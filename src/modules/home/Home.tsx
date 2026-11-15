@@ -81,14 +81,14 @@ export default function Home() {
       </section>
 
       <div className="page">
-        <div className="home-stats" role="list" aria-label="Plan at a glance">
+        <nav className="home-stats" aria-label="Plan at a glance">
           {stats.map(([label, n, to]) => (
-            <Link key={label} to={to} className="home-stat" role="listitem">
+            <Link key={label} to={to} className="home-stat">
               <span className="readout__label">{label}</span>
               <span className="readout__value readout__value--sm">{n}</span>
             </Link>
           ))}
-        </div>
+        </nav>
 
         {project.diagrams.length > 0 && (
           <section aria-labelledby="setups-h" style={{ marginTop: 'var(--s-5)' }}>

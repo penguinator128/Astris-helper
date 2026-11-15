@@ -63,6 +63,8 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     controls: OrbitControls;
     mannequin: THREE.Group;
     lightGroup: THREE.Group;
+    kitGroup: THREE.Group;
+    workLight: THREE.HemisphereLight;
     render: () => void;
   } | null>(null);
   const [unsupported] = useState(() => {
@@ -104,6 +106,11 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     const mannequin = buildMannequin();
     scene.add(mannequin);
     const lightGroup = new THREE.Group();
+    const kitGroup = new THREE.Group();
+    scene.add(kitGroup);
+    // Soft work light so the whole layout reads in orbit; off in camera view so the lighting plan stays honest.
+    const workLight = new THREE.HemisphereLight(0xf3f1ea, 0x2a2a2c, 0);
+    scene.add(workLight);
     scene.add(lightGroup);
 
     const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
@@ -113,7 +120,7 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.12;
     controls.minDistance = 0.6;
-    controls.maxDistance = 14;
+    controls.maxDistance = 32;
     controls.maxPolarAngle = Math.PI * 0.52;
 
     let raf = 0;
@@ -141,7 +148,7 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     });
     ro.observe(host);
     loop();
-    stateRef.current = { renderer, scene, camera, controls, mannequin, lightGroup, render };
+    stateRef.current = { renderer, scene, camera, controls, mannequin, lightGroup, kitGroup, workLight, render };
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
@@ -264,6 +271,144 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     st.render();
   }, [objects]);
 
+  // Everything else on the plan: extra talent, cameras, mics, recorders, monitors, walls, marks and areas.
+  useEffect(() => {
+    const st = stateRef.current;
+    if (!st) return;
+    const g = st.kitGroup;
+    while (g.children.length) {
+      const c = g.children[0];
+      g.remove(c);
+      c.traverse((n) => {
+        const mesh = n as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const m = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(m)) m.forEach((x) => x.dispose());
+        else m?.dispose();
+      });
+    }
+    const mat = (colour: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: colour, roughness: 0.8, ...opts });
+    const add = (mesh: THREE.Object3D) => {
+      mesh.traverse((n) => {
+        const m = n as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = true;
+          m.receiveShadow = true;
+        }
+      });
+      g.add(mesh);
+    };
+    const facing = (deg: number) => new THREE.Vector3(Math.sin(THREE.MathUtils.degToRad(deg)), 0, -Math.cos(THREE.MathUtils.degToRad(deg)));
+    const stand = (x: number, z: number, h: number, colour = 0x2a2a2c) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, h, 8), mat(colour));
+      m.position.set(x, h / 2, z);
+      return m;
+    };
+    const subjects = objects.filter((o) => o.type === 'subject');
+    const firstCam = objects.find((o) => o.type === 'camera');
+
+    for (const o of objects) {
+      const pos = toThree(o.x, o.y, 0);
+      if (o.type === 'subject' && o !== subjects[0]) {
+        if (o.subjectKind === 'person') {
+          const m = buildMannequin();
+          m.position.set(pos.x, 0, pos.z);
+          m.rotation.y = THREE.MathUtils.degToRad(-o.rotation + 180);
+          m.scale.setScalar(o.height / 1.7);
+          add(m);
+        } else {
+          const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, o.height, 0.5), mat(0x6a6a70));
+          b.position.set(pos.x, o.height / 2, pos.z);
+          add(b);
+        }
+      } else if (o.type === 'wall') {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(o.length, 2.4, 0.1), mat(0x3a3a3e, { roughness: 1 }));
+        w.position.set(pos.x, 1.2, pos.z);
+        w.rotation.y = -THREE.MathUtils.degToRad(o.rotation);
+        add(w);
+      } else if (o.type === 'camera') {
+        if (mode === 'camera' && o === firstCam) continue;
+        const grp = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.08), mat(0x111113, { roughness: 0.5 }));
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.09, 16), mat(0x1c1c1e, { roughness: 0.4 }));
+        lens.rotation.x = Math.PI / 2;
+        lens.position.z = 0.08;
+        body.add(lens);
+        body.position.set(0, 1.5, 0);
+        grp.add(body);
+        for (let k = 0; k < 3; k++) {
+          const a = (k / 3) * Math.PI * 2;
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.55, 6), mat(0x2a2a2c));
+          leg.position.set(Math.cos(a) * 0.22, 0.73, Math.sin(a) * 0.22);
+          leg.lookAt(0, 1.45, 0);
+          leg.rotateX(Math.PI / 2);
+          grp.add(leg);
+        }
+        grp.position.set(pos.x, 0, pos.z);
+        const f = facing(o.rotation);
+        grp.lookAt(pos.x + f.x, 0, pos.z + f.z);
+        add(grp);
+      } else if (o.type === 'gear') {
+        const f = facing(o.rotation);
+        const isLav = /lav/i.test(o.label);
+        if (o.category === 'mic' && !isLav) {
+          // Mic on a boom stand at head height, angled down towards where it points
+          const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.26, 12), mat(0x1a1a1c, { roughness: 0.4 }));
+          const head = new THREE.Group();
+          head.add(mic);
+          mic.rotation.x = Math.PI / 2;
+          head.position.set(pos.x, 2.0, pos.z);
+          head.lookAt(pos.x + f.x, 1.6, pos.z + f.z);
+          add(head);
+          add(stand(pos.x - f.x * 0.6, pos.z - f.z * 0.6, 2.0));
+          const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.62, 6), mat(0x2a2a2c));
+          boom.position.set(pos.x - f.x * 0.3, 2.0, pos.z - f.z * 0.3);
+          boom.lookAt(pos.x, 2.0, pos.z);
+          boom.rotateX(Math.PI / 2);
+          add(boom);
+        } else if (isLav) {
+          const lav = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), mat(0x0b0b0c));
+          lav.position.set(pos.x, 1.35, pos.z);
+          add(lav);
+        } else if (o.category === 'monitor') {
+          const mon = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.13, 0.03), mat(0x111113, { emissive: 0x334455, emissiveIntensity: 0.6 }));
+          mon.position.set(pos.x, 1.4, pos.z);
+          mon.lookAt(pos.x + f.x, 1.4, pos.z + f.z);
+          add(mon);
+          add(stand(pos.x, pos.z, 1.33));
+        } else if (o.category === 'grip') {
+          add(stand(pos.x, pos.z, 1.8));
+        } else {
+          const colour = o.category === 'power' ? 0x8a1f18 : o.category === 'recorder' ? 0x1a1a1c : 0x2e2e33;
+          const box = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.09, 0.15), mat(colour, { roughness: 0.6 }));
+          box.position.set(pos.x, 0.045, pos.z);
+          box.rotation.y = -THREE.MathUtils.degToRad(o.rotation);
+          add(box);
+        }
+      } else if (o.type === 'zone') {
+        const colour = o.zoneKind === 'base' ? 0xffc400 : o.zoneKind === 'nogo' || o.zoneKind === 'power' ? 0xb3261e : 0x9a978d;
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), new THREE.MeshStandardMaterial({ color: colour, transparent: true, opacity: o.zoneKind === 'base' ? 0.35 : 0.22, roughness: 1, depthWrite: false }));
+        plane.rotation.x = -Math.PI / 2;
+        plane.rotation.z = -THREE.MathUtils.degToRad(o.rotation);
+        plane.position.set(pos.x, 0.006, pos.z);
+        plane.receiveShadow = true;
+        g.add(plane);
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(o.w, o.h)), new THREE.LineBasicMaterial({ color: colour }));
+        edges.rotation.copy(plane.rotation);
+        edges.position.set(pos.x, 0.008, pos.z);
+        g.add(edges);
+      } else if (o.type === 'mark') {
+        const tMat = mat(0xffc400, { roughness: 0.6 });
+        const a = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.004, 0.035), tMat);
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.004, 0.16), tMat);
+        a.position.set(pos.x, 0.004, pos.z - 0.06);
+        b.position.set(pos.x, 0.004, pos.z + 0.02);
+        g.add(a, b);
+      }
+    }
+    st.render();
+  }, [objects, mode]);
+
   // Camera mode
   const prevMode = useRef<'camera' | 'orbit' | null>(null);
   useEffect(() => {
@@ -281,10 +426,16 @@ export default function LiveView({ objects, mode, verticalFovDeg }: Props) {
     } else {
       camera.fov = 40;
       controls.enabled = true;
-      if (prevMode.current !== 'orbit') camera.position.set(target.x + 2.6, 2.3, target.z + 3.2);
+      if (prevMode.current !== 'orbit') {
+        // Start far enough back to see the whole plan.
+        const extent = Math.max(3, ...objects.map((o) => Math.hypot(o.x - (subject?.x ?? 0), o.y - (subject?.y ?? 0))));
+        const dist = Math.min(28, extent * 1.3 + 2);
+        camera.position.set(target.x + dist * 0.55, Math.max(2.3, dist * 0.6), target.z + dist * 0.7);
+      }
       controls.target.copy(target);
     }
     prevMode.current = mode;
+    st.workLight.intensity = mode === 'orbit' ? 1.6 : 0;
     camera.lookAt(target);
     camera.updateProjectionMatrix();
     controls.update();

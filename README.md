@@ -102,7 +102,7 @@ All data lives in the browser's IndexedDB on the device: projects, settings and 
 ## Known limits
 
 - The call sheet does not fetch a weather forecast, because the app is offline-first. Sun and moon conditions are calculated on the device, with a free-text field for the forecast.
-- The 3D view is a stylised mannequin with real-time spot lights and soft shadows. It shows direction, ratio and colour, not physically exact light transport.
+- The 3D view is stylised: mannequins for talent, simple shapes for cameras on tripods, mics on stands, monitors, kit and walls, and tinted floor areas for home base and the rest. Camera view is lit only by your plan's lights; orbit adds a soft work light so the layout reads. It shows direction, ratio and colour, not physically exact light transport.
 - Codec bitrates, pixel pitches and gel values are typical figures. Check them against your camera and gel swatch book.
 - Map tiles need a connection the first time an area is viewed.
 - Wake Lock needs a browser that supports it (iOS Safari 16.4 or later). Vibration on clap is Android only.
