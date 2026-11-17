@@ -470,6 +470,8 @@ export interface GearItem {
   payloadKg?: number;
   camera?: CameraConfig;
   lens?: LensSpec;
+  /** The saved rig this camera came from, so it can be updated. */
+  savedRigId?: string;
 }
 
 /** A cable or wireless link from one item's output to another item's input. */

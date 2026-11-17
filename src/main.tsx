@@ -4,6 +4,7 @@ import './styles/index.css';
 import App from './App';
 import { useSettings, applyTheme, initialTheme, flushSettings } from './store/settings';
 import { useProjects, flushProjects } from './store/projects';
+import { useLibrary } from './store/library';
 import { collectUnusedImages } from './lib/backup';
 
 applyTheme(initialTheme());
@@ -11,6 +12,7 @@ applyTheme(initialTheme());
 async function boot() {
   await useSettings.getState().hydrate();
   await useProjects.getState().hydrate();
+  await useLibrary.getState().hydrate();
   const splash = document.getElementById('splash');
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

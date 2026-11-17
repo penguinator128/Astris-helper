@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Copy, Pencil, Plus, Trash2, Check, History, Download } from 'lucide-react';
 import { Blueprint } from '@/components/Blueprint';
+import { LibraryPanel } from './LibraryPanel';
+import '@/modules/cameras/cameras.css';
 import { listBackups, deleteBackup, backupProject, type Backup } from '@/store/backups';
 import { downloadBlob, safeFilename } from '@/lib/download';
 import { PageHead } from '@/components/PageHead';
@@ -98,6 +100,8 @@ export default function ProjectsPage() {
           </div>
         ))}
       </div>
+
+      <LibraryPanel />
 
       <Blueprint title="Backups on this device" index="B" aside={<History size={16} aria-hidden />}>
         <div className="stack stack--sm">

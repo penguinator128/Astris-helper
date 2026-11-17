@@ -88,27 +88,6 @@
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--s-2);
 }
-.preset-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--s-3);
-  border: 1px solid var(--hair);
-  border-radius: var(--r-2);
-  text-align: left;
-  min-height: 84px;
-}
-.preset-card:hover {
-  border-color: var(--fg);
-  background: var(--bg-2);
-}
-.preset-card strong {
-  font-weight: 500;
-}
-.preset-card span {
-  font-size: var(--fs-12);
-  color: var(--fg-2);
-}
 .diagram-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

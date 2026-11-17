@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { ArrowRight, Cable, Plus, Trash2, Unplug, Wand2, Box } from 'lucide-react';
+import { ArrowRight, Cable, Plus, Save, Trash2, Unplug, Wand2, Box } from 'lucide-react';
 import { PageHead } from '@/components/PageHead';
 import { Blueprint } from '@/components/Blueprint';
 import { Button } from '@/components/Button';
@@ -16,6 +16,9 @@ import { adapterFor, lensesFor, maxApertureAt, type AdapterInfo } from '@/lib/ca
 import { lensFit } from '@/lib/camera/mounts';
 import { BODY_TYPES, inputFromBody, startingInput, type BodyType } from '@/lib/camera/custom';
 import { CameraForm, LensForm } from './CustomForms';
+import { SaveRigSheet } from './SaveRigSheet';
+import { useLibrary, liveCameras, liveLenses, liveRigs, type SavedRig } from '@/store/library';
+import { instantiateRig } from '@/lib/gear/rigs';
 import { PROFILES, profile } from '@/lib/camera/profiles';
 import { ISOS, STOPS, balanceExposure, cameraConfig, derive, exposureLabel, exposureOffset, normalise, shutterSeconds, warnings } from '@/lib/camera/settings';
 import { ndOnRig, withRigNd } from '@/lib/camera/nd';
@@ -69,6 +72,14 @@ export default function CamerasPage() {
   const current = cameras.find((g) => g.id === params.get('cam')) ?? cameras[0];
   const [adding, setAdding] = useState(false);
 
+  function useRig(rig: SavedRig) {
+    const made = instantiateRig(rig, `Camera ${letter(cameras.length)} · ${rig.name}`);
+    made.gear[0] = { ...made.gear[0], savedRigId: rig.id };
+    patch((p) => ({ gear: [...p.gear, ...made.gear], connections: [...p.connections, ...made.connections] }));
+    setParams({ cam: made.cameraId }, { replace: true });
+    setAdding(false);
+    toast(`Added your ${rig.name} with ${made.gear.length - 1} parts`);
+  }
   function addBody(t: GearTemplate) {
     const g = gearFromTemplate(t, `Camera ${letter(cameras.length)} · ${t.name}`);
     patch((p) => ({ gear: [...p.gear, g] }));
@@ -106,13 +117,17 @@ export default function CamerasPage() {
         </div>
         {current ? <CameraEditor key={current.id} cam={current} index={cameras.indexOf(current)} /> : <EmptyState title="No cameras yet" body="Add a camera body to set its lens, exposure, colour and rig." action={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add a camera</Button>} />}
       </div>
-      <BodyPicker open={adding} onClose={() => setAdding(false)} onPick={addBody} />
+      <BodyPicker open={adding} onClose={() => setAdding(false)} onPick={addBody} onUseRig={useRig} />
     </main>
   );
 }
 
-function BodyPicker({ open, onClose, onPick, title = 'Add a camera' }: { open: boolean; onClose: () => void; onPick: (t: GearTemplate) => void; title?: string }) {
+function BodyPicker({ open, onClose, onPick, onUseRig, title = 'Add a camera' }: { open: boolean; onClose: () => void; onPick: (t: GearTemplate) => void; onUseRig?: (r: SavedRig) => void; title?: string }) {
   const [describing, setDescribing] = useState<BodyType | null>(null);
+  const library = useLibrary();
+  const saveCamera = useLibrary((s) => s.saveCamera);
+  const rigs = liveRigs(library);
+  const myCameras = liveCameras(library);
   const [formKey, setFormKey] = useState(0);
   const describe = (t: BodyType) => {
     setFormKey((k) => k + 1);
@@ -122,6 +137,33 @@ function BodyPicker({ open, onClose, onPick, title = 'Add a camera' }: { open: b
     <>
       <Sheet open={open && !describing} onClose={onClose} title={title} wide>
         <div className="stack">
+          {onUseRig && rigs.length > 0 && (
+            <div className="stack stack--sm">
+              <span className="micro">My rigs</span>
+              <div className="template-grid">
+                {rigs.map((r) => (
+                  <button key={r.id} type="button" className="preset-card rig-card" onClick={() => onUseRig(r)}>
+                    {r.thumbnail && <img src={r.thumbnail} alt="" className="rig-card__img" />}
+                    <strong>Use my {r.name}</strong>
+                    <span className="micro">{r.parts.length} parts · {r.connections.length} connections</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {myCameras.length > 0 && (
+            <div className="stack stack--sm">
+              <span className="micro">My cameras</span>
+              <div className="template-grid">
+                {myCameras.map((c) => (
+                  <button key={c.id} type="button" className="preset-card" onClick={() => onPick(bodyTemplate(c.body))}>
+                    <strong>{c.body.manufacturer} {c.body.model}</strong>
+                    <span className="micro">{c.body.mount} mount · {c.body.battery}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="stack stack--sm">
             <span className="micro">Any camera</span>
             <p className="tiny muted">Pick the kind of camera, then fill in its mount, sensor, ISO, recording options and ports. Works for every make and model.</p>
@@ -159,6 +201,7 @@ function BodyPicker({ open, onClose, onPick, title = 'Add a camera' }: { open: b
           onClose={() => setDescribing(null)}
           onSave={(b) => {
             setDescribing(null);
+            saveCamera(b);
             onPick(bodyTemplate(b));
           }}
         />
@@ -180,6 +223,9 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
   const warns = warnings(config, lens);
   const [picking, setPicking] = useState<'lens' | 'body' | 'equip' | 'connect' | 'details' | 'lensDetails' | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const saveCameraToLibrary = useLibrary((s) => s.saveCamera);
+  const saveLensToLibrary = useLibrary((s) => s.saveLens);
+  const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [live, setLive] = useState<'camera' | 'orbit'>('camera');
 
@@ -476,6 +522,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
           title={`Rig and accessories (${rig.length})`}
           aside={
             <div className="cluster">
+              <Button size="sm" variant="quiet" icon={<Save size={14} />} onClick={() => setSaving(true)}>Save rig</Button>
               <Button size="sm" variant="quiet" icon={<Wand2 size={14} />} onClick={() => setPicking('connect')}>Auto Connect</Button>
               <Button size="sm" icon={<Plus size={14} />} onClick={() => setPicking('equip')}>Add Equipment</Button>
             </div>
@@ -508,7 +555,10 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
           title={b.custom ? 'Camera details' : `Edit ${b.manufacturer} ${b.model}`}
           initial={{ input: inputFromBody(b), id: b.custom ? b.id : undefined }}
           onClose={() => setPicking(null)}
-          onSave={(nb) => changeBody(bodyTemplate(nb))}
+          onSave={(nb) => {
+            saveCameraToLibrary(nb);
+            changeBody(bodyTemplate(nb));
+          }}
         />
       )}
       {picking === 'lensDetails' && lens && lensGear && (
@@ -519,6 +569,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
           initial={lens}
           onClose={() => setPicking(null)}
           onSave={(l) => {
+            saveLensToLibrary(l);
             const t = lensTemplate(l);
             patch((pr) => ({ gear: pr.gear.map((g) => (g.id === lensGear.id ? { ...g, lens: l, model: t.name, name: g.name === g.model ? t.name : g.name, specs: t.specs, weightKg: l.weightKg } : g)), }));
             setPicking(null);
@@ -528,6 +579,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
       )}
       <EquipmentSheet open={picking === 'equip'} onClose={() => setPicking(null)} cam={cam} rig={rig} />
       <AutoConnectSheet open={picking === 'connect'} onClose={() => setPicking(null)} cameraId={cam.id} />
+      {saving && <SaveRigSheet cam={cam} onClose={() => setSaving(false)} />}
       <Confirm open={removing} onClose={() => setRemoving(false)} onConfirm={removeCamera} title="Remove this camera?" body="Its lens and accessories stay in your gear, unrigged. Its connections are removed." confirmLabel="Remove" danger />
     </div>
   );
@@ -596,8 +648,11 @@ function LensPicker({ open, onClose, mount, onPick, currentId }: { open: boolean
     .filter((x) => x.ad);
   const ownedNo = owned.filter((g) => g.lens!.mount !== mount && !adapterFor(g.lens!.mount, mount));
   const builtIn = mount === 'Fixed';
+  const myLenses = liveLenses(useLibrary()).filter((x) => x.lens.mount === mount || adapterFor(x.lens.mount, mount));
+  const saveLens = useLibrary((s) => s.saveLens);
   function described(l: LensSpec) {
     setDescribing(false);
+    saveLens(l);
     const t = lensTemplate(l);
     if (l.mount === mount) onPick({ template: t });
     else {
@@ -623,6 +678,22 @@ function LensPicker({ open, onClose, mount, onPick, currentId }: { open: boolean
             </Button>
             <span className="tiny muted">Any make. If its mount differs, a suitable adapter is added when one can work.</span>
           </div>
+          {myLenses.length > 0 && (
+            <div className="stack stack--sm">
+              <span className="micro">My lenses</span>
+              <div className="template-grid">
+                {myLenses.map((x) => {
+                  const ad = x.lens.mount === mount ? null : adapterFor(x.lens.mount, mount);
+                  return (
+                    <button key={x.id} type="button" className="preset-card" onClick={() => onPick({ template: lensTemplate(x.lens), adapter: ad ?? undefined })}>
+                      <strong>{x.lens.manufacturer} {x.lens.model}</strong>
+                      <span className="micro">{ad ? `With ${ad.name}` : 'Fits directly'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {(ownedFit.length > 0 || ownedAdapted.length > 0) && (
             <div className="stack stack--sm">
               <span className="micro">Already in your gear</span>
