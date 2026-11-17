@@ -15,6 +15,7 @@ import { useProject, useProjects } from '@/store/projects';
 import { useSettings } from '@/store/settings';
 import { envOf, FIXTURES, DIFFUSION, fixtureInfo } from '@/lib/light/environment';
 import { EnvironmentPanel } from './EnvironmentPanel';
+import { CameraSheetButton } from '@/modules/export/CameraSheetButton';
 import { FURNITURE, POSES, bodyExtent, furnitureInfo, isFurniture, seatOf, seatPeople } from '@/lib/scene/pose';
 import { cameraConfig, derive, exposureLabel, exposureOffset } from '@/lib/camera/settings';
 import { framing, framingSummary } from '@/lib/scene/framing';
@@ -356,6 +357,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
           <Button size="sm" variant="quiet" icon={<Download size={14} />} onClick={exportPng}>
             PNG
           </Button>
+          <CameraSheetButton diagramId={initial.id} />
           <Button size="sm" variant="primary" icon={<Link2 size={14} />} onClick={() => setAttachOpen(true)}>
             Attach to shot
           </Button>

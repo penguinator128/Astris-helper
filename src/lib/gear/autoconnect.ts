@@ -93,6 +93,11 @@ export function check(fg: GearItem, fp: GearPort, tg: GearItem, tp: GearPort): C
     const hosts = HOSTS[kind(tg)];
     const bonus = hosts ? hosts[kind(fg)] : undefined;
     if (hosts && bonus === undefined) return no(`${tg.name} does not mount on ${fg.name}`);
+    // Supports go under the rig; handles, monitors and receivers go on top or at the side.
+    const isBase = (pt: GearPort) => /base|bottom|tripod/i.test(pt.name);
+    const k = kind(tg);
+    if (['tripod', 'monopod', 'gimbal', 'rod-plate'].includes(k) && fg.ports.some(isBase) && !isBase(fp)) return no(`${tg.name} goes under ${fg.name}, on its base`);
+    if (['monitor', 'top-handle', 'side-handle', 'nato-rail', 'arm', 'mic-oncam', 'wireless-rx', 'video-tx'].includes(k) && isBase(fp)) return no(`${fp.name} is underneath; ${tg.name} goes on top or at the side`);
     const what = fp.connector === 'Lens mount' ? `${fp.standard ?? ''} mount` : fp.connector === 'Filter thread' ? `${fp.standard} thread` : fp.connector;
     return { ok: true, score: 60 + (bonus ?? 10), reason: `${tg.name} on ${fg.name} (${what})` };
   }

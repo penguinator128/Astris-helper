@@ -23,6 +23,7 @@ import { check, checkProduction, portUsage, rigKey } from '@/lib/gear/autoconnec
 import { defaultLight } from '@/modules/light/presets';
 import { envOf, presetEnv } from '@/lib/light/environment';
 import { AutoConnectSheet } from '@/modules/gear/AutoConnectSheet';
+import { CameraSheetButton } from '@/modules/export/CameraSheetButton';
 import type { CameraConfig, Connection, DiagramObject, GearCategory, GearItem, LightingDiagram } from '@/types/project';
 import '@/modules/gear/gear.css';
 import './cameras.css';
@@ -80,9 +81,12 @@ export default function CamerasPage() {
         title="Cameras"
         sub="Every camera with its own lens, settings, rig and connections. Change a setting and the simulated image updates."
         actions={
-          <Link to="/plan" className="btn btn--sm btn--quiet">
-            Shoot plan <ArrowRight size={14} />
-          </Link>
+          <div className="cluster">
+            <CameraSheetButton />
+            <Link to="/plan" className="btn btn--sm btn--quiet">
+              Shoot plan <ArrowRight size={14} />
+            </Link>
+          </div>
         }
       />
       <div className="stack">

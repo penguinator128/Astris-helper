@@ -5,6 +5,7 @@ import { C, Pack, clean, table, type RGB } from './pack';
 import { compositionPng, storyboardFramePng } from './raster';
 import { renderDiagramPng } from '@/modules/light/diagramPng';
 import { evaluate, ratioLabel, EMITTING } from '@/lib/light/photometry';
+import { envOf } from '@/lib/light/environment';
 import { CATEGORIES, PLAN_VIEWS, SIGNALS, cableFor, categoryInfo, layerOf, planLinks } from '@/lib/gear/catalog';
 import { equipmentList } from '@/lib/gear/equipment';
 import { getSensor } from '@/lib/calc/sensors';
@@ -381,7 +382,7 @@ async function lightingSection({ p, project, plan }: Ctx) {
   for (let i = 0; i < diagrams.length; i++) {
     const d = diagrams[i];
     if (i > 0) p.newPage();
-    const ph = evaluate(d.objects);
+    const ph = evaluate(d.objects, envOf(d));
     const links = planLinks(d.objects, project.gear, project.connections);
     const count = (t: string) => d.objects.filter((o) => o.type === t).length;
     p.subTitle(d.name, `${count('camera')} cam · ${count('light')} lights · ${count('gear')} other kit`);

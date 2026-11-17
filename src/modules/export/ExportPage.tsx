@@ -1,3 +1,4 @@
+import { CameraSheetButton } from './CameraSheetButton';
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Download, FileDown, FileJson, Upload, Image as ImageIcon, ExternalLink } from 'lucide-react';
@@ -96,7 +97,7 @@ export default function ExportPage() {
 
   return (
     <main className="page">
-      <PageHead index="07 · Shoot Pack" title="Shoot Pack" sub={`A branded PDF of ${project.name}, plus image and backup exports.`} />
+      <PageHead index="07 · Shoot Pack" title="Shoot Pack" sub={`A branded PDF of ${project.name}, plus image and backup exports. For the camera team, the camera sheet has settings, rigs, connections and setup steps.`} actions={<CameraSheetButton />} />
       <div className="tool">
         <div className="stack">
           <Blueprint title="Include" index="01">
