@@ -110,19 +110,38 @@ interface ProjectsStore {
   /** Mutate the current project immutably. The mutator returns a partial patch. */
   patch: (id: string, patch: Partial<Project> | ((p: Project) => Partial<Project>)) => void;
   patchCurrent: (patch: Partial<Project> | ((p: Project) => Partial<Project>)) => void;
+  /** Save plans from the cloud as they are (edit times kept) and drop ones deleted elsewhere. */
+  applyCloud: (upserts: Project[], removes: string[]) => Promise<void>;
+}
+
+/** Plans deleted on this device that the cloud has not heard about yet. */
+export const DELETES_KEY = 'sync-deletes';
+async function recordDelete(id: string) {
+  const list = (await dbGetMeta<{ id: string; at: number }[]>(DELETES_KEY)) ?? [];
+  await dbPutMeta(DELETES_KEY, [...list.filter((d) => d.id !== id), { id, at: Date.now() }]);
 }
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const pending = new Map<string, Project>();
+/**
+ * Save at once, then at most every 200 ms while edits keep coming (dragging, typing),
+ * always ending with the latest version. A single edit is never left waiting.
+ */
 function schedulePersist(p: Project) {
-  const t = timers.get(p.id);
-  if (t) clearTimeout(t);
-  timers.set(
-    p.id,
-    setTimeout(() => {
-      timers.delete(p.id);
-      void dbPutProject(p);
-    }, 200),
-  );
+  if (timers.has(p.id)) {
+    pending.set(p.id, p);
+    return;
+  }
+  void dbPutProject(p);
+  const tick = () => {
+    const next = pending.get(p.id);
+    if (next) {
+      pending.delete(p.id);
+      void dbPutProject(next);
+      timers.set(p.id, setTimeout(tick, 200));
+    } else timers.delete(p.id);
+  };
+  timers.set(p.id, setTimeout(tick, 200));
 }
 
 export const useProjects = create<ProjectsStore>((set, get) => ({
@@ -194,6 +213,7 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
     const { projects, currentId } = get();
     if (!projects[id]) return;
     void backupProject(projects[id], 'Before delete');
+    void recordDelete(id);
     const rest = { ...projects };
     delete rest[id];
     let next = currentId === id ? null : currentId;
@@ -232,6 +252,32 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   patchCurrent: (patch) => {
     const id = get().currentId;
     if (id) get().patch(id, patch);
+  },
+
+  applyCloud: async (upserts, removes) => {
+    const projects = { ...get().projects };
+    for (const raw of upserts) {
+      const p = migrateProject(raw);
+      // Keep a copy of what this device had before it is replaced.
+      if (projects[p.id] && projects[p.id].updatedAt !== p.updatedAt) await backupProject(projects[p.id], 'Before update from another device');
+      projects[p.id] = p;
+      await dbPutProject(p);
+    }
+    for (const id of removes) {
+      if (!projects[id]) continue;
+      await backupProject(projects[id], 'Deleted on another device');
+      delete projects[id];
+      await dbDeleteProject(id);
+    }
+    if (!Object.keys(projects).length) {
+      const p = createEmptyProject('Untitled project');
+      projects[p.id] = p;
+      await dbPutProject(p);
+    }
+    let currentId = get().currentId;
+    if (!currentId || !projects[currentId]) currentId = Object.values(projects).sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+    set({ projects, currentId });
+    await dbPutMeta(CURRENT_KEY, currentId);
   },
 }));
 
@@ -279,6 +325,7 @@ export async function flushProjects(): Promise<void> {
     const t = timers.get(id);
     if (t) clearTimeout(t);
     timers.delete(id);
+    pending.delete(id);
     const p = projects[id];
     if (p) await dbPutProject(p);
   }

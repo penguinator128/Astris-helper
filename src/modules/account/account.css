@@ -1,0 +1,35 @@
+.account {
+  max-width: 560px;
+}
+.account-note {
+  padding: var(--s-3);
+  border-left: 3px solid var(--accent);
+  background: var(--bg-2);
+  margin: 0;
+}
+.account-error {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border-left: 3px solid #b3261e;
+  background: var(--bg-2);
+  font-size: var(--fs-14);
+}
+.account-list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.link-btn {
+  background: none;
+  border: 0;
+  padding: var(--s-2) 0;
+  min-height: 44px;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}

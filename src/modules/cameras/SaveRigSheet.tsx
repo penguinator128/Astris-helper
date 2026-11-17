@@ -18,9 +18,13 @@ export function SaveRigSheet({ cam, onClose }: { cam: GearItem; onClose: () => v
   const linked = liveRigs(library).find((r) => r.id === cam.savedRigId);
   const [name, setName] = useState(linked?.name ?? `${cameraConfig(cam).model} rig`);
   const captured = captureRig(cam.id, project.gear, project.connections);
+  const [busy, setBusy] = useState(false);
 
   async function save(asNew: boolean) {
-    if (!captured) return;
+    if (!captured || busy) return;
+    setBusy(true);
+    // Let the button show "Saving" before the picture is drawn.
+    await new Promise((r) => setTimeout(r, 30));
     // A small picture of the rig for the card; skipped quietly if this device cannot draw it.
     let thumbnail: string | undefined;
     try {
@@ -43,12 +47,12 @@ export function SaveRigSheet({ cam, onClose }: { cam: GearItem; onClose: () => v
       footer={
         <div className="cluster">
           {linked && (
-            <Button variant="quiet" onClick={() => void save(true)}>
+            <Button variant="quiet" disabled={busy} onClick={() => void save(true)}>
               Save as a new rig
             </Button>
           )}
-          <Button variant="primary" onClick={() => void save(false)}>
-            {linked ? `Update "${linked.name}"` : 'Save rig'}
+          <Button variant="primary" disabled={busy} onClick={() => void save(false)}>
+            {busy ? 'Saving…' : linked ? `Update "${linked.name}"` : 'Save rig'}
           </Button>
         </div>
       }

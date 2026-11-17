@@ -53,6 +53,7 @@ export const router = createBrowserRouter([
       { path: 'checklist', lazy: lazyModule(() => import('@/modules/checklist/Checklist')) },
       { path: 'export', lazy: lazyModule(() => import('@/modules/export/ExportPage')) },
       { path: 'projects', lazy: lazyModule(() => import('@/modules/projects/ProjectsPage')) },
+      { path: 'account', lazy: lazyModule(() => import('@/modules/account/AccountPage')) },
       { path: 'settings', lazy: lazyModule(() => import('@/modules/settings/SettingsPage')) },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

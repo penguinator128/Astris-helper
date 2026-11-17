@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Wrench,
   Camera,
+  UserRound,
 } from 'lucide-react';
 
 export interface Tool {
@@ -50,6 +51,7 @@ export const TOOLS: Tool[] = [
 
 export const UTILITY_NAV = [
   { id: 'projects', path: '/projects', name: 'My Production Plans', icon: FolderOpen },
+  { id: 'account', path: '/account', name: 'Account', icon: UserRound },
   { id: 'settings', path: '/settings', name: 'Settings', icon: Settings },
 ];
 

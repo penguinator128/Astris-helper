@@ -6,3 +6,8 @@ dev-dist
 coverage
 playwright-report
 test-results
+
+# Local environment (never commit keys)
+.env
+.env.local
+.env.*.local
