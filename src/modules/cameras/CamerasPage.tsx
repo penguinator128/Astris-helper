@@ -11,20 +11,23 @@ import { Stepper } from '@/components/Stepper';
 import { useProject, useProjects } from '@/store/projects';
 import { toast } from '@/store/toast';
 import { uid } from '@/lib/id';
-import { BODIES, body as bodyById } from '@/lib/camera/bodies';
-import { LENSES, ADAPTERS, lensesFor, maxApertureAt, type LensDef } from '@/lib/camera/lenses';
+import { BODIES, body as bodyById, bodyOf } from '@/lib/camera/bodies';
+import { adapterFor, lensesFor, maxApertureAt, type AdapterInfo } from '@/lib/camera/lenses';
+import { lensFit } from '@/lib/camera/mounts';
+import { BODY_TYPES, inputFromBody, startingInput, type BodyType } from '@/lib/camera/custom';
+import { CameraForm, LensForm } from './CustomForms';
 import { PROFILES, profile } from '@/lib/camera/profiles';
 import { ISOS, STOPS, balanceExposure, cameraConfig, derive, exposureLabel, exposureOffset, normalise, shutterSeconds, warnings } from '@/lib/camera/settings';
 import { ndOnRig, withRigNd } from '@/lib/camera/nd';
 import { evaluate } from '@/lib/light/photometry';
 import { framing, framingSummary } from '@/lib/scene/framing';
-import { TEMPLATES, blankGear, gearFromTemplate, nextName, categoryInfo, type GearTemplate } from '@/lib/gear/catalog';
+import { TEMPLATES, adapterTemplate, blankGear, bodyTemplate, gearFromTemplate, lensTemplate, nextName, categoryInfo, type GearTemplate } from '@/lib/gear/catalog';
 import { check, checkProduction, portUsage, rigKey } from '@/lib/gear/autoconnect';
 import { defaultLight } from '@/modules/light/presets';
 import { envOf, presetEnv } from '@/lib/light/environment';
 import { AutoConnectSheet } from '@/modules/gear/AutoConnectSheet';
 import { CameraSheetButton } from '@/modules/export/CameraSheetButton';
-import type { CameraConfig, Connection, DiagramObject, GearCategory, GearItem, LightingDiagram } from '@/types/project';
+import type { CameraConfig, Connection, DiagramObject, GearCategory, GearItem, LensSpec, LightingDiagram } from '@/types/project';
 import '@/modules/gear/gear.css';
 import './cameras.css';
 
@@ -109,19 +112,32 @@ export default function CamerasPage() {
 }
 
 function BodyPicker({ open, onClose, onPick, title = 'Add a camera' }: { open: boolean; onClose: () => void; onPick: (t: GearTemplate) => void; title?: string }) {
-  const groups: { id: string; label: string }[] = [
-    { id: 'cinema', label: 'Cinema' },
-    { id: 'mirrorless', label: 'Mirrorless' },
-    { id: 'dslr', label: 'DSLR' },
-  ];
+  const [describing, setDescribing] = useState<BodyType | null>(null);
+  const [formKey, setFormKey] = useState(0);
+  const describe = (t: BodyType) => {
+    setFormKey((k) => k + 1);
+    setDescribing(t);
+  };
   return (
-    <Sheet open={open} onClose={onClose} title={title} wide>
-      <div className="stack">
-        {groups.map((gr) => (
-          <div key={gr.id} className="stack stack--sm">
-            <span className="micro">{gr.label}</span>
+    <>
+      <Sheet open={open && !describing} onClose={onClose} title={title} wide>
+        <div className="stack">
+          <div className="stack stack--sm">
+            <span className="micro">Any camera</span>
+            <p className="tiny muted">Pick the kind of camera, then fill in its mount, sensor, ISO, recording options and ports. Works for every make and model.</p>
             <div className="template-grid">
-              {BODIES.filter((b) => b.type === gr.id).map((b) => {
+              {BODY_TYPES.map((t) => (
+                <button key={t.id} type="button" className="preset-card" onClick={() => describe(t.id)}>
+                  <strong>{t.label}</strong>
+                  <span>Describe it</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <details className="body-shortcuts">
+            <summary className="micro">Shortcuts: cameras already in the app ({BODIES.length})</summary>
+            <div className="template-grid">
+              {BODIES.map((b) => {
                 const t = TEMPLATES.find((x) => x.id === `body-${b.id}`);
                 if (!t) return null;
                 return (
@@ -132,10 +148,22 @@ function BodyPicker({ open, onClose, onPick, title = 'Add a camera' }: { open: b
                 );
               })}
             </div>
-          </div>
-        ))}
-      </div>
-    </Sheet>
+          </details>
+        </div>
+      </Sheet>
+      {describing && (
+        <CameraForm
+          key={formKey}
+          open
+          initial={{ input: startingInput(describing) }}
+          onClose={() => setDescribing(null)}
+          onSave={(b) => {
+            setDescribing(null);
+            onPick(bodyTemplate(b));
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -146,11 +174,12 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
   const nd = ndOnRig(cam.id, project.gear);
   const lensGear = project.gear.find((g) => g.id === config.lensGearId);
   const lens = lensGear?.lens;
-  const b = bodyById(config.bodyId);
+  const b = bodyOf(config);
   const prof = profile(config.profile);
   const d = derive(config, 1920);
   const warns = warnings(config, lens);
-  const [picking, setPicking] = useState<'lens' | 'body' | 'equip' | 'connect' | null>(null);
+  const [picking, setPicking] = useState<'lens' | 'body' | 'equip' | 'connect' | 'details' | 'lensDetails' | null>(null);
+  const [formKey, setFormKey] = useState(0);
   const [removing, setRemoving] = useState(false);
   const [live, setLive] = useState<'camera' | 'orbit'>('camera');
 
@@ -171,7 +200,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
   const issues = checkProduction(project.gear, project.connections).filter((i) => i.gearIds.some((id) => id === cam.id || rig.some((r) => r.id === id)));
 
   /* ---------- Lens ---------- */
-  function attachLens(choice: { lens?: LensDef; gearId?: string; adapterId?: string }) {
+  function attachLens(choice: LensChoice) {
     patch((pr) => {
       let gear = [...pr.gear];
       let connections = pr.connections;
@@ -188,8 +217,8 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
       if (mountPort) walk(cam.id, mountPort.id);
       connections = connections.filter((c) => !chain.has(c.id));
       let lensItem = choice.gearId ? gear.find((g) => g.id === choice.gearId) : undefined;
-      if (!lensItem && choice.lens) {
-        const t = TEMPLATES.find((x) => x.id === `lens-${choice.lens!.id}`)!;
+      if (!lensItem && choice.template) {
+        const t = choice.template;
         lensItem = gearFromTemplate(t, nextName(gear, 'lens', t.name));
         gear.push(lensItem);
       }
@@ -197,8 +226,8 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
       gear = gear.map((g) => (g.id === lensItem!.id ? { ...g, rigOf: cam.id } : g));
       const lensIn = lensItem.ports.find((p) => p.connector === 'Lens mount' && p.dir === 'in');
       const add: Connection[] = [];
-      if (choice.adapterId) {
-        const t = TEMPLATES.find((x) => x.id === `adapter-${choice.adapterId}`)!;
+      if (choice.adapter) {
+        const t = adapterTemplate(choice.adapter);
         const existing = gear.find((g) => g.category === 'adapter' && g.model === t.name && !pr.connections.some((c) => c.toGear === g.id));
         const ad = existing ?? gearFromTemplate(t, nextName(gear, 'adapter', t.name));
         if (!existing) gear.push(ad);
@@ -238,9 +267,10 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
       const keep = new Set(ports.map((p) => p.id));
       const connections = pr.connections.filter((c) => (c.fromGear !== cam.id || keep.has(c.fromPort)) && (c.toGear !== cam.id || keep.has(c.toPort)));
       const oldCfg = cameraConfig(old);
-      const nb = bodyById(t.bodyId!);
+      const nb = t.body ?? bodyById(t.bodyId!);
       const lensSpec = pr.gear.find((g) => g.id === oldCfg.lensGearId)?.lens;
-      const fits = lensSpec && lensSpec.mount === nb.mount;
+      const fits = !!lensSpec && lensSpec.mount === nb.mount && nb.mount === oldCfg.mount;
+      if (lensSpec && !fits) toast('The lens was taken off: attach it again to fit it to the new mount (with an adapter if it needs one).');
       const cfg = normalise({ ...fresh.camera!, focalLength: oldCfg.focalLength, aperture: oldCfg.aperture, iso: oldCfg.iso, kelvin: oldCfg.kelvin, tint: oldCfg.tint, shutterMode: oldCfg.shutterMode, shutterAngle: oldCfg.shutterAngle, shutterSpeed: oldCfg.shutterSpeed, fps: oldCfg.fps, focusDistance: oldCfg.focusDistance, height: oldCfg.height, tilt: oldCfg.tilt, notes: oldCfg.notes, lensGearId: fits ? oldCfg.lensGearId : undefined }, fits ? lensSpec : undefined);
       const lost = pr.connections.length - connections.length;
       if (lost) toast(`${lost} connection${lost === 1 ? '' : 's'} removed: the new body has no matching port`);
@@ -347,16 +377,23 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
       <div className="cam-controls stack">
         <Blueprint title="Body" index={letter(index)} aside={<Button size="sm" variant="quiet" onClick={() => setPicking('body')}>Change</Button>}>
           <div className="stack stack--sm">
-            <div className="kv"><span className="micro">Camera</span><strong>{b.manufacturer} {b.model}</strong></div>
+            <div className="kv"><span className="micro">Camera{b.custom ? ' · described by you' : ''}</span><strong>{b.manufacturer} {b.model}</strong></div>
             <div className="kv"><span className="micro">Mount · sensor</span><span className="mono">{b.mount} · {d.sensor.name}</span></div>
             <div className="kv"><span className="micro">Battery</span><span className="mono">{b.battery}</span></div>
+            <Button size="sm" variant="quiet" onClick={() => { setFormKey((k) => k + 1); setPicking('details'); }}>
+              {b.custom ? 'Edit camera details' : 'Not quite right? Edit the details'}
+            </Button>
           </div>
         </Blueprint>
 
         <Blueprint title="Lens" aside={<Button size="sm" variant="quiet" onClick={() => setPicking('lens')}>{lens ? 'Change' : 'Attach'}</Button>}>
           <div className="stack stack--sm">
             {lens ? (
-              <div className="kv"><span className="micro">{lens.mount} mount</span><strong>{lens.manufacturer} {lens.model}</strong></div>
+              <div className="kv">
+                <span className="micro">{lens.mount} mount</span>
+                <strong>{lens.manufacturer} {lens.model}</strong>
+                <Button size="sm" variant="quiet" onClick={() => { setFormKey((k) => k + 1); setPicking('lensDetails'); }}>Edit lens details</Button>
+              </div>
             ) : (
               <p className="muted">No lens yet. Attach one to use its real focal range and apertures.</p>
             )}
@@ -464,6 +501,31 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
 
       <LensPicker open={picking === 'lens'} onClose={() => setPicking(null)} mount={b.mount} onPick={attachLens} currentId={config.lensGearId} />
       <BodyPicker open={picking === 'body'} onClose={() => setPicking(null)} onPick={changeBody} title="Change body" />
+      {picking === 'details' && (
+        <CameraForm
+          key={formKey}
+          open
+          title={b.custom ? 'Camera details' : `Edit ${b.manufacturer} ${b.model}`}
+          initial={{ input: inputFromBody(b), id: b.custom ? b.id : undefined }}
+          onClose={() => setPicking(null)}
+          onSave={(nb) => changeBody(bodyTemplate(nb))}
+        />
+      )}
+      {picking === 'lensDetails' && lens && lensGear && (
+        <LensForm
+          key={formKey}
+          open
+          mount={lens.mount}
+          initial={lens}
+          onClose={() => setPicking(null)}
+          onSave={(l) => {
+            const t = lensTemplate(l);
+            patch((pr) => ({ gear: pr.gear.map((g) => (g.id === lensGear.id ? { ...g, lens: l, model: t.name, name: g.name === g.model ? t.name : g.name, specs: t.specs, weightKg: l.weightKg } : g)), }));
+            setPicking(null);
+            toast('Lens details saved');
+          }}
+        />
+      )}
       <EquipmentSheet open={picking === 'equip'} onClose={() => setPicking(null)} cam={cam} rig={rig} />
       <AutoConnectSheet open={picking === 'connect'} onClose={() => setPicking(null)} cameraId={cam.id} />
       <Confirm open={removing} onClose={() => setRemoving(false)} onConfirm={removeCamera} title="Remove this camera?" body="Its lens and accessories stay in your gear, unrigged. Its connections are removed." confirmLabel="Remove" danger />
@@ -519,68 +581,99 @@ function RigItem({ g, isBody }: { g: GearItem; isBody: boolean }) {
   );
 }
 
-function LensPicker({ open, onClose, mount, onPick, currentId }: { open: boolean; onClose: () => void; mount: string; onPick: (c: { lens?: LensDef; gearId?: string; adapterId?: string }) => void; currentId?: string }) {
+type LensChoice = { template?: GearTemplate; gearId?: string; adapter?: AdapterInfo };
+
+function LensPicker({ open, onClose, mount, onPick, currentId }: { open: boolean; onClose: () => void; mount: string; onPick: (c: LensChoice) => void; currentId?: string }) {
   const project = useProject();
+  const [describing, setDescribing] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const { native, adapted } = lensesFor(mount);
   const owned = project.gear.filter((g) => g.category === 'lens' && g.lens);
   const ownedFit = owned.filter((g) => g.lens!.mount === mount);
   const ownedAdapted = owned
     .filter((g) => g.lens!.mount !== mount)
-    .map((g) => ({ g, ad: ADAPTERS.find((a) => a.cameraMount === mount && a.lensMount === g.lens!.mount) }))
+    .map((g) => ({ g, ad: adapterFor(g.lens!.mount, mount) }))
     .filter((x) => x.ad);
+  const ownedNo = owned.filter((g) => g.lens!.mount !== mount && !adapterFor(g.lens!.mount, mount));
+  const builtIn = mount === 'Fixed';
+  function described(l: LensSpec) {
+    setDescribing(false);
+    const t = lensTemplate(l);
+    if (l.mount === mount) onPick({ template: t });
+    else {
+      const ad = adapterFor(l.mount, mount);
+      if (ad) onPick({ template: t, adapter: ad });
+      else toast(`A ${l.mount} lens cannot be adapted to ${mount}: ${(() => { const f = lensFit(l.mount, mount); return f.kind === 'no' ? f.reason : 'check the mount'; })()}`);
+    }
+  }
   return (
-    <Sheet open={open} onClose={onClose} title={`Lenses for ${mount} mount`} wide>
-      <div className="stack">
-        {(ownedFit.length > 0 || ownedAdapted.length > 0) && (
-          <div className="stack stack--sm">
-            <span className="micro">Already in your gear</span>
-            <div className="template-grid">
-              {ownedFit.map((g) => (
-                <button key={g.id} type="button" className={`preset-card ${g.id === currentId ? 'is-on' : ''}`} onClick={() => onPick({ gearId: g.id })}>
-                  <strong>{g.name}</strong>
-                  <span className="micro">Fits directly</span>
-                </button>
-              ))}
-              {ownedAdapted.map(({ g, ad }) => (
-                <button key={g.id} type="button" className="preset-card" onClick={() => onPick({ gearId: g.id, adapterId: ad!.id })}>
-                  <strong>{g.name}</strong>
-                  <span className="micro">With {ad!.name}</span>
-                </button>
-              ))}
-            </div>
+    <>
+      <Sheet open={open && !describing} onClose={onClose} title={builtIn ? 'Built-in lens' : `Lenses for ${mount} mount`} wide>
+        <div className="stack">
+          <div className="cluster">
+            <Button
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={() => {
+                setFormKey((k) => k + 1);
+                setDescribing(true);
+              }}
+            >
+              {builtIn ? 'Describe the built-in lens' : 'Describe any lens'}
+            </Button>
+            <span className="tiny muted">Any make. If its mount differs, a suitable adapter is added when one can work.</span>
           </div>
-        )}
-        <div className="stack stack--sm">
-          <span className="micro">{mount} lenses</span>
-          {native.length ? (
-            <div className="template-grid">
-              {native.map((l) => (
-                <button key={l.id} type="button" className="preset-card" onClick={() => onPick({ lens: l })}>
-                  <strong>{l.manufacturer} {l.model}</strong>
-                  <span className="micro">{l.weightKg} kg · {l.filterThread ? `${l.filterThread} mm filter` : 'no filter thread'}</span>
-                </button>
-              ))}
+          {(ownedFit.length > 0 || ownedAdapted.length > 0) && (
+            <div className="stack stack--sm">
+              <span className="micro">Already in your gear</span>
+              <div className="template-grid">
+                {ownedFit.map((g) => (
+                  <button key={g.id} type="button" className={`preset-card ${g.id === currentId ? 'is-on' : ''}`} onClick={() => onPick({ gearId: g.id })}>
+                    <strong>{g.name}</strong>
+                    <span className="micro">Fits directly</span>
+                  </button>
+                ))}
+                {ownedAdapted.map(({ g, ad }) => (
+                  <button key={g.id} type="button" className="preset-card" onClick={() => onPick({ gearId: g.id, adapter: ad! })}>
+                    <strong>{g.name}</strong>
+                    <span className="micro">With {ad!.name}</span>
+                  </button>
+                ))}
+              </div>
+              {ownedNo.length > 0 && <p className="tiny muted">Not shown, because they cannot be adapted to {mount}: {ownedNo.map((g) => g.name).join(', ')}.</p>}
             </div>
-          ) : (
-            <p className="muted">No {mount} lenses in the database yet. Add one in Gear and fill in its lens details.</p>
+          )}
+          {!builtIn && (
+            <details className="body-shortcuts" open={native.length > 0 && owned.length === 0}>
+              <summary className="micro">Shortcuts: lenses already in the app that fit ({native.length + adapted.length})</summary>
+              <div className="stack stack--sm">
+                {native.length > 0 && (
+                  <div className="template-grid">
+                    {native.map((l) => (
+                      <button key={l.id} type="button" className="preset-card" onClick={() => onPick({ template: TEMPLATES.find((x) => x.id === `lens-${l.id}`) })}>
+                        <strong>{l.manufacturer} {l.model}</strong>
+                        <span className="micro">Fits directly · {l.weightKg} kg</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {adapted.length > 0 && (
+                  <div className="template-grid">
+                    {adapted.map(({ lens: l, adapter }) => (
+                      <button key={`${l.id}-${adapter.id}`} type="button" className="preset-card" onClick={() => onPick({ template: TEMPLATES.find((x) => x.id === `lens-${l.id}`), adapter })}>
+                        <strong>{l.manufacturer} {l.model}</strong>
+                        <span className="micro">{adapter.name}{adapter.focalFactor !== 1 ? ` · ×${adapter.focalFactor} focal` : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </details>
           )}
         </div>
-        {adapted.length > 0 && (
-          <div className="stack stack--sm">
-            <span className="micro">Through an adapter</span>
-            <div className="template-grid">
-              {adapted.map(({ lens: l, adapter }) => (
-                <button key={`${l.id}-${adapter.id}`} type="button" className="preset-card" onClick={() => onPick({ lens: l, adapterId: adapter.id })}>
-                  <strong>{l.manufacturer} {l.model}</strong>
-                  <span className="micro">{adapter.name}{adapter.focalFactor !== 1 ? ` · ×${adapter.focalFactor} focal` : ''}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <p className="micro">Only lenses that fit {mount}, directly or with a real adapter, are shown. {LENSES.length} lenses in the database.</p>
-      </div>
-    </Sheet>
+      </Sheet>
+      {describing && <LensForm key={formKey} open mount={builtIn ? 'Fixed' : mount} onClose={() => setDescribing(false)} onSave={described} />}
+    </>
   );
 }
 

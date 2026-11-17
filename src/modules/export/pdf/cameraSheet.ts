@@ -10,7 +10,7 @@ import { checkProduction, rigKey } from '@/lib/gear/autoconnect';
 import { cableSummary } from '@/lib/gear/equipment';
 import { cameraConfig, derive, exposureLabel, exposureOffset, shutterSeconds, warnings } from '@/lib/camera/settings';
 import { withRigNd } from '@/lib/camera/nd';
-import { body as bodyById } from '@/lib/camera/bodies';
+import { bodyOf } from '@/lib/camera/bodies';
 import { profile } from '@/lib/camera/profiles';
 import { envOf, ENV_PRESETS, fixtureInfo, DIFFUSION } from '@/lib/light/environment';
 import { bodyExtent, POSES, furnitureInfo, isFurniture } from '@/lib/scene/pose';
@@ -144,7 +144,7 @@ async function sceneSheet(p: Pack, project: Project, settings: Settings, { d, ca
     const cfg = withRigNd(cameraConfig(cam), cam.id, project.gear);
     const lensItem = project.gear.find((g) => g.id === cfg.lensGearId);
     const dd = derive(cfg);
-    const b = bodyById(cfg.bodyId);
+    const b = bodyOf(cfg);
     const t = shutterSeconds(cfg);
     const exp = exposureLabel(exposureOffset(cfg, ph.total));
     p.ensure(60);

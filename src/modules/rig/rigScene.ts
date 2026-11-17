@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Connection, GearItem, SignalKind } from '@/types/project';
-import { body as bodyById } from '@/lib/camera/bodies';
+import { bodyOf } from '@/lib/camera/bodies';
 import { LENSES } from '@/lib/camera/lenses';
 import { cameraConfig } from '@/lib/camera/settings';
 
@@ -50,7 +50,7 @@ export function buildRig(cam: GearItem, gear: GearItem[], connections: Connectio
   const root = new THREE.Group();
   const parts: RigPart[] = [];
   const cfg = cameraConfig(cam);
-  const b = bodyById(cfg.bodyId);
+  const b = bodyOf(cfg);
   const [W, H, D] = b.size.map(mm);
   const items = rigParts(cam, gear);
   const has = (k: string) => items.some((g) => (g.rigKind ?? '') === k);

@@ -356,12 +356,59 @@ export interface LensSpec {
   minAperture: number;
   minFocus: number; // metres
   filterThread: number; // mm, 0 if none
+  /** Image circle the lens is made for; a smaller one than the sensor vignettes. */
+  format?: LensFormat;
+  length?: number; // mm, mount to front
+  diameter?: number; // mm
+  weightKg?: number;
+}
+
+export type LensFormat = 'medium' | 'full-frame' | 's35' | 'aps-c' | 'mft' | 'one-inch';
+
+export type BodyPortSpec = [name: string, dir: 'in' | 'out', connector: Connector, signal: SignalKind, extra?: { standard?: string; phantom?: boolean; vMin?: number; vMax?: number; vOut?: number }];
+
+export interface CodecSpec {
+  name: string;
+  format: string;
+  bitDepths: string[];
+  chroma: string[];
+}
+
+/** Everything the app needs to know about a camera body. The database has some; you can describe any other. */
+export interface CameraBodySpec {
+  id: string;
+  manufacturer: string;
+  model: string;
+  type: 'dslr' | 'mirrorless' | 'cinema' | 'camcorder' | 'action' | 'phone';
+  mount: string;
+  sensorId: string;
+  /** For a described camera: its sensor size. */
+  sensor?: { name: string; width: number; height: number };
+  isoRange: [number, number];
+  nativeIso: number[];
+  usesEI: boolean;
+  resolutions: { label: string; maxFps: number }[];
+  fpsOptions: number[];
+  codecs: CodecSpec[];
+  profiles: string[];
+  colourSpaces: string[];
+  stabilisation: string[];
+  battery: string;
+  volts: [number, number];
+  ports: BodyPortSpec[];
+  size: [number, number, number]; // mm: width, height, depth
+  weightKg: number;
+  note?: string;
+  /** True for a camera you described yourself. */
+  custom?: boolean;
 }
 
 export type FocusMode = 'MF' | 'AF-S' | 'AF-C' | 'Face and eye AF';
 
 export interface CameraConfig {
   bodyId: string;
+  /** The full body description for a camera you described yourself (database bodies are looked up by id). */
+  body?: CameraBodySpec;
   manufacturer: string;
   model: string;
   mount: string;

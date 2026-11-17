@@ -1,37 +1,8 @@
-import type { Connector, SignalKind } from '@/types/project';
+import type { BodyPortSpec, CameraBodySpec, CameraConfig, CodecSpec } from '@/types/project';
 
-export type PortSpec = [name: string, dir: 'in' | 'out', connector: Connector, signal: SignalKind, extra?: { standard?: string; phantom?: boolean; vMin?: number; vMax?: number; vOut?: number }];
-
-export interface Codec {
-  name: string;
-  format: string;
-  bitDepths: string[];
-  chroma: string[];
-}
-
-export interface CameraBody {
-  id: string;
-  manufacturer: string;
-  model: string;
-  type: 'dslr' | 'mirrorless' | 'cinema';
-  mount: string;
-  sensorId: string;
-  isoRange: [number, number];
-  nativeIso: number[];
-  usesEI: boolean;
-  resolutions: { label: string; maxFps: number }[];
-  fpsOptions: number[];
-  codecs: Codec[];
-  profiles: string[];
-  colourSpaces: string[];
-  stabilisation: string[];
-  battery: string;
-  volts: [number, number];
-  ports: PortSpec[];
-  size: [number, number, number]; // mm: width, height, depth
-  weightKg: number;
-  note?: string;
-}
+export type PortSpec = BodyPortSpec;
+export type CameraBody = CameraBodySpec;
+export type Codec = CodecSpec;
 
 const FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 100, 119.88, 120, 180, 240];
 const H264_8: Codec = { name: 'H.264', format: 'MP4', bitDepths: ['8-bit'], chroma: ['4:2:0'] };
@@ -153,6 +124,11 @@ export const BODIES: CameraBody[] = [
     size: [150, 140, 200], weightKg: 2.5,
   },
 ];
+
+/** The body behind a camera's settings: the one you described, or the database entry. */
+export function bodyOf(c: Pick<CameraConfig, 'bodyId' | 'body'>): CameraBody {
+  return c.body ?? body(c.bodyId);
+}
 
 export function body(id: string): CameraBody {
   return BODIES.find((b) => b.id === id) ?? BODIES.find((b) => b.id === 'generic-mirrorless')!;

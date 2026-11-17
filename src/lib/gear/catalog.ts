@@ -1,7 +1,7 @@
-import type { Connector, DiagramObject, GearCategory, GearItem, GearPort, GearSpec, SignalKind } from '@/types/project';
+import type { Connector, DiagramObject, GearCategory, GearItem, GearPort, GearSpec, LensFormat, LensSpec, SignalKind } from '@/types/project';
 import { isFurniture } from '@/lib/scene/pose';
-import { BODIES, body as bodyById, type PortSpec as BodyPortSpec } from '@/lib/camera/bodies';
-import { LENSES, ADAPTERS } from '@/lib/camera/lenses';
+import { BODIES, body as bodyById, type CameraBody, type PortSpec as BodyPortSpec } from '@/lib/camera/bodies';
+import { LENSES, ADAPTERS, type AdapterInfo, type LensDef } from '@/lib/camera/lenses';
 import { defaultConfig } from '@/lib/camera/settings';
 import { uid } from '@/lib/id';
 
@@ -90,14 +90,18 @@ export interface GearTemplate {
   specs?: GearSpec[];
   bodyId?: string;
   lensId?: string;
+  /** A described body (not in the database). */
+  body?: CameraBody;
+  lensSpec?: LensSpec;
 }
 
 const T = (id: string, category: GearCategory, name: string, rigKind: string, ports: PortSpec[], extra: Partial<GearTemplate> = {}): GearTemplate => ({ id, category, name, power: '', ports, rigKind, ...extra });
 const BAT = (id: string, name: string, std: string, volts: number, wh: number, kg: number): GearTemplate =>
   T(id, 'battery', name, std === 'V-mount' ? 'battery-vmount' : 'battery', [['Battery', 'out', 'Battery plate', 'power', { standard: std, vOut: volts }], ...(std === 'V-mount' ? ([['D-tap out', 'out', 'D-tap', 'power', { vOut: volts }]] as PortSpec[]) : [])], { weightKg: kg, specs: [{ label: 'Voltage', value: `${volts} V` }, { label: 'Capacity', value: `${wh} Wh` }] });
 
-/** Camera bodies from the database, each with its lens mount and battery slot. */
-const BODY_TEMPLATES: GearTemplate[] = BODIES.map((b) => ({
+/** A gear template for any camera body, from the database or described by you, with its lens mount and battery slot. */
+export function bodyTemplate(b: CameraBody): GearTemplate {
+  return {
   id: `body-${b.id}`,
   category: 'camera',
   name: b.manufacturer === 'Generic' ? b.model : `${b.manufacturer} ${b.model}`,
@@ -112,27 +116,49 @@ const BODY_TEMPLATES: GearTemplate[] = BODIES.map((b) => ({
     { label: 'Battery', value: b.battery },
     { label: 'Weight', value: `${b.weightKg} kg` },
   ],
-}));
+  body: b.custom ? b : undefined,
+  };
+}
 
-const LENS_TEMPLATES: GearTemplate[] = LENSES.map((l) => ({
-  id: `lens-${l.id}`,
-  category: 'lens',
-  name: `${l.manufacturer} ${l.model}`,
-  power: '',
-  rigKind: 'lens',
-  lensId: l.id,
-  weightKg: l.weightKg,
-  ports: [['Mount', 'in', 'Lens mount', 'mount', { standard: l.mount }], ...(l.filterThread ? ([['Filter thread', 'out', 'Filter thread', 'mount', { standard: `${l.filterThread} mm` }]] as PortSpec[]) : []), ['Focus ring', 'out', 'Focus ring', 'mount']],
-  specs: [
-    { label: 'Mount', value: l.mount },
-    { label: 'Focal length', value: l.focalMin === l.focalMax ? `${l.focalMin} mm` : `${l.focalMin}–${l.focalMax} mm` },
-    { label: 'Widest aperture', value: l.maxAperture === l.maxApertureTele ? `f/${l.maxAperture}` : `f/${l.maxAperture}–${l.maxApertureTele}` },
-    { label: 'Filter thread', value: l.filterThread ? `${l.filterThread} mm` : 'None' },
-    { label: 'Close focus', value: `${l.minFocus} m` },
-  ],
-}));
+const BODY_TEMPLATES: GearTemplate[] = BODIES.map(bodyTemplate);
 
-const ADAPTER_TEMPLATES: GearTemplate[] = ADAPTERS.map((a) => T(`adapter-${a.id}`, 'adapter', a.name, 'adapter', [['Camera side', 'in', 'Lens mount', 'mount', { standard: a.cameraMount }], ['Lens side', 'out', 'Lens mount', 'mount', { standard: a.lensMount }]], { note: a.note, weightKg: 0.12, specs: [{ label: 'Fits camera', value: a.cameraMount }, { label: 'Takes lens', value: a.lensMount }] }));
+/** Adapter gear for a lens mount on a camera mount (named or generic). */
+export function adapterTemplate(a: AdapterInfo): GearTemplate {
+  return T(`adapter-${a.id}`, 'adapter', a.name, 'adapter', [['Camera side', 'in', 'Lens mount', 'mount', { standard: a.cameraMount }], ['Lens side', 'out', 'Lens mount', 'mount', { standard: a.lensMount }]], { note: a.note, weightKg: a.focalFactor !== 1 ? 0.2 : 0.12, specs: [{ label: 'Fits camera', value: a.cameraMount }, { label: 'Takes lens', value: a.lensMount }] });
+}
+
+/** A lens template from any lens description. */
+export function lensTemplate(l: LensSpec & { id?: string }): GearTemplate {
+  const prime = l.focalMin === l.focalMax;
+  return {
+    id: `lens-${l.id ?? 'custom'}`,
+    category: 'lens',
+    name: `${l.manufacturer} ${l.model}`.trim(),
+    power: '',
+    rigKind: 'lens',
+    weightKg: l.weightKg,
+    ports: [['Mount', 'in', 'Lens mount', 'mount', { standard: l.mount }], ...(l.filterThread ? ([['Filter thread', 'out', 'Filter thread', 'mount', { standard: `${l.filterThread} mm` }]] as PortSpec[]) : []), ['Focus ring', 'out', 'Focus ring', 'mount']],
+    specs: [
+      { label: 'Mount', value: l.mount },
+      { label: 'Focal length', value: prime ? `${l.focalMin} mm` : `${l.focalMin}–${l.focalMax} mm` },
+      { label: 'Widest aperture', value: l.maxAperture === l.maxApertureTele ? `f/${l.maxAperture}` : `f/${l.maxAperture}–${l.maxApertureTele}` },
+      { label: 'Filter thread', value: l.filterThread ? `${l.filterThread} mm` : 'None' },
+      { label: 'Close focus', value: `${l.minFocus} m` },
+    ],
+    lensSpec: { manufacturer: l.manufacturer, model: l.model, mount: l.mount, focalMin: l.focalMin, focalMax: l.focalMax, maxAperture: l.maxAperture, maxApertureTele: l.maxApertureTele, minAperture: l.minAperture, minFocus: l.minFocus, filterThread: l.filterThread, format: l.format, length: l.length, diameter: l.diameter, weightKg: l.weightKg },
+  };
+}
+
+/** Format a database lens was made for, from its mount and name. */
+function formatOf(l: LensDef): LensFormat {
+  if (l.mount === 'MFT') return 'mft';
+  if (l.mount === 'X' || /RF-S|EF-S|\bDC\b|\bDT\b/.test(l.model)) return 'aps-c';
+  return 'full-frame';
+}
+
+const LENS_TEMPLATES: GearTemplate[] = LENSES.map((l) => lensTemplate({ ...l, format: formatOf(l), length: l.length, diameter: l.diameter, weightKg: l.weightKg }));
+
+const ADAPTER_TEMPLATES: GearTemplate[] = ADAPTERS.map(adapterTemplate);
 
 const RIG_TEMPLATES: GearTemplate[] = [
   T('cage', 'rigging', 'Camera cage', 'cage', [['Camera screw', 'in', '1/4-20', 'mount'], ['Top cold shoe', 'out', 'Cold shoe', 'mount'], ['Side cold shoe', 'out', 'Cold shoe', 'mount'], ['NATO rail (top)', 'out', 'NATO', 'mount'], ['NATO rail (left)', 'out', 'NATO', 'mount'], ['Top 1/4-20', 'out', '1/4-20', 'mount'], ['Side 1/4-20', 'out', '1/4-20', 'mount'], ['Base 1/4-20', 'out', '1/4-20', 'mount']], { weightKg: 0.25, specs: [{ label: 'Fits', value: 'Body-specific; check your model' }] }),
@@ -215,7 +241,7 @@ export function templatesFor(category: GearCategory) {
 }
 
 export function gearFromTemplate(t: GearTemplate, nameOverride?: string): GearItem {
-  const lens = t.lensId ? LENSES.find((l) => l.id === t.lensId) : undefined;
+  const lensDb = t.lensId ? LENSES.find((l) => l.id === t.lensId) : undefined;
   return {
     id: uid(),
     category: t.category,
@@ -229,8 +255,8 @@ export function gearFromTemplate(t: GearTemplate, nameOverride?: string): GearIt
     weightKg: t.weightKg,
     payloadKg: t.payloadKg,
     specs: t.specs,
-    camera: t.bodyId ? defaultConfig(bodyById(t.bodyId)) : undefined,
-    lens: lens ? { manufacturer: lens.manufacturer, model: lens.model, mount: lens.mount, focalMin: lens.focalMin, focalMax: lens.focalMax, maxAperture: lens.maxAperture, maxApertureTele: lens.maxApertureTele, minAperture: lens.minAperture, minFocus: lens.minFocus, filterThread: lens.filterThread } : undefined,
+    camera: t.body ? defaultConfig(t.body) : t.bodyId ? defaultConfig(bodyById(t.bodyId)) : undefined,
+    lens: t.lensSpec ?? (lensDb ? { manufacturer: lensDb.manufacturer, model: lensDb.model, mount: lensDb.mount, focalMin: lensDb.focalMin, focalMax: lensDb.focalMax, maxAperture: lensDb.maxAperture, maxApertureTele: lensDb.maxApertureTele, minAperture: lensDb.minAperture, minFocus: lensDb.minFocus, filterThread: lensDb.filterThread } : undefined),
   };
 }
 

@@ -28,6 +28,8 @@ export const PROFILES: Profile[] = [
   { id: 'flog2', name: 'F-Log2', kind: 'log', curve: 'flog2', minIso: 1250, saturation: 0.72, colourSpaces: ['F-Gamut'] },
   { id: 'bmd-film', name: 'Film (Gen 5)', kind: 'log', curve: 'bmdfilm', saturation: 0.75, colourSpaces: ['Blackmagic Wide Gamut'] },
   { id: 'hlg', name: 'HLG', kind: 'hdr', curve: 'hlg', saturation: 0.95, colourSpaces: ['BT.2020'] },
+  { id: 'log-generic', name: 'Log (any maker)', kind: 'log', curve: 'clog3', minIso: 400, saturation: 0.74, colourSpaces: ['Native wide gamut', 'BT.2020', 'BT.709'] },
+  { id: 'raw', name: 'RAW (shown as Log until graded)', kind: 'log', curve: 'clog3', saturation: 0.74, colourSpaces: ['Native wide gamut'] },
 ];
 
 export function profile(id: string): Profile {

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { CameraConfig } from '@/types/project';
 import { derive, whiteBalanceGains } from '@/lib/camera/settings';
 import { profile, CURVE_ID } from '@/lib/camera/profiles';
-import { body as bodyById } from '@/lib/camera/bodies';
+import { bodyOf } from '@/lib/camera/bodies';
 
 /** Exposure scale that makes f/2.8, 1/48 s, ISO 800 with a 100% key at 2 m read as a normal exposure. */
 export const EXPOSURE_K = 0.95;
@@ -118,7 +118,7 @@ export function gradeMaterial(): THREE.ShaderMaterial {
 export function applyGrade(m: THREE.ShaderMaterial, c: CameraConfig, widthPx: number, ambientStops = 0) {
   const d = derive(c, widthPx);
   const prof = profile(c.profile);
-  const b = bodyById(c.bodyId);
+  const b = bodyOf(c);
   const f = c.focalLength;
   const s = Math.max(c.focusDistance * 1000, f + 1);
   const cocMm = (f * f) / (c.aperture * (s - f));

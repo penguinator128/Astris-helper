@@ -1,7 +1,8 @@
 import type { CameraConfig, GearItem, LensSpec } from '@/types/project';
-import { body as bodyById, guessBody, type CameraBody } from './bodies';
+import { bodyOf, guessBody, type CameraBody } from './bodies';
 import { profile } from './profiles';
 import { maxApertureAt } from './lenses';
+import { LENS_FORMATS, vignettes } from './mounts';
 import { getSensor, circleOfConfusion, type Sensor } from '@/lib/calc/sensors';
 import { depthOfField, fieldOfView } from '@/lib/calc/optics';
 import { kelvinToRgb } from '@/lib/colour/kelvin';
@@ -13,6 +14,7 @@ export function defaultConfig(b: CameraBody, lens?: LensSpec): CameraConfig {
   const fps = 25;
   return {
     bodyId: b.id,
+    body: b.custom ? b : undefined,
     manufacturer: b.manufacturer,
     model: b.model,
     mount: b.mount,
@@ -61,7 +63,7 @@ export function shutterAngleOf(c: CameraConfig): number {
 
 /** Keep every setting valid for the body and lens after any change. */
 export function normalise(c: CameraConfig, lens?: LensSpec): CameraConfig {
-  const b = bodyById(c.bodyId);
+  const b = bodyOf(c);
   const out = { ...c };
   out.iso = Math.min(b.isoRange[1], Math.max(b.isoRange[0], Math.round(out.iso)));
   out.ei = b.usesEI ? Math.min(b.isoRange[1], Math.max(b.isoRange[0], out.ei)) : out.iso;
@@ -96,12 +98,16 @@ export interface Warning {
 }
 
 export function warnings(c: CameraConfig, lens?: LensSpec): Warning[] {
-  const b = bodyById(c.bodyId);
+  const b = bodyOf(c);
   const prof = profile(c.profile);
   const out: Warning[] = [];
   const t = shutterSeconds(c);
   const angle = shutterAngleOf(c);
   if (!lens) out.push({ level: 'warn', text: 'No lens attached. Attach one to get accurate field of view and depth of field.' });
+  if (lens) {
+    const sensorW = b.sensor?.width ?? getSensor(c.sensorId).width;
+    if (vignettes(lens.format, sensorW)) out.push({ level: 'warn', text: `This lens is made for a smaller sensor (${LENS_FORMATS.find((f) => f.id === lens.format)?.label ?? lens.format}). Expect dark corners unless you use the camera's crop mode.` });
+  }
   if (prof.kind === 'log' && c.bitDepth === '8-bit') out.push({ level: 'warn', text: `${prof.name} in 8-bit can band in skies and skin when graded. Use a 10-bit codec if you can.` });
   if (prof.minIso && c.iso < prof.minIso) out.push({ level: 'warn', text: `${prof.name} is rated from ISO ${prof.minIso}. Below that you lose highlight range.` });
   if (b.nativeIso.length > 1 && !b.nativeIso.includes(c.iso)) {
@@ -135,8 +141,8 @@ export interface Derived {
 
 /** Everything the readouts and the preview need, calculated from the settings. */
 export function derive(c: CameraConfig, imageWidthPx = 1920): Derived {
-  const b = bodyById(c.bodyId);
-  const sensor = getSensor(c.sensorId);
+  const b = bodyOf(c);
+  const sensor = b.sensor ? getSensor('custom', b.sensor) : getSensor(c.sensorId);
   const fov = fieldOfView(c.focalLength, sensor.width, sensor.height);
   const coc = circleOfConfusion(sensor);
   const dof = depthOfField(c.focalLength, c.aperture, c.focusDistance, coc);
@@ -195,7 +201,7 @@ const nearest = (list: number[], v: number) => list.reduce((a, x) => (Math.abs(M
  * ISO back towards native first, then ND, then ISO further, then aperture.
  */
 export function balanceExposure(c: CameraConfig, subjectLight: number, lens: LensSpec | undefined, ndMax: number): CameraConfig {
-  const b = bodyById(c.bodyId);
+  const b = bodyOf(c);
   const prof = profile(c.profile);
   let need = -exposureOffset(c, subjectLight); // stops to add
   if (!Number.isFinite(need)) return c;

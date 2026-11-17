@@ -1,4 +1,5 @@
 import type { LensSpec } from '@/types/project';
+import { lensFit } from './mounts';
 
 export interface LensDef extends LensSpec {
   id: string;
@@ -51,8 +52,34 @@ export function maxApertureAt(lens: LensSpec, focal: number): number {
   return Math.round((lens.maxAperture + (lens.maxApertureTele - lens.maxAperture) * t) * 10) / 10;
 }
 
-export function lensesFor(mount: string): { native: LensDef[]; adapted: { lens: LensDef; adapter: (typeof ADAPTERS)[number] }[] } {
+export interface AdapterInfo {
+  id: string;
+  name: string;
+  lensMount: string;
+  cameraMount: string;
+  focalFactor: number;
+  note: string;
+}
+
+/** A named adapter if we know one, otherwise a plain adapter wherever the flange distances allow it. */
+export function adapterFor(lensMount: string, cameraMount: string): AdapterInfo | null {
+  const known = ADAPTERS.find((a) => a.lensMount === lensMount && a.cameraMount === cameraMount && a.focalFactor === 1);
+  if (known) return known;
+  const fit = lensFit(lensMount, cameraMount);
+  if (fit.kind !== 'adapter') return null;
+  return { id: `generic-${lensMount}-${cameraMount}`.replace(/\s+/g, '-'), name: `${lensMount} to ${cameraMount} adapter`, lensMount, cameraMount, focalFactor: 1, note: fit.note };
+}
+
+/** Lenses for a camera mount: native ones, and ones that fit through an adapter (named or generic). */
+export function lensesFor(mount: string): { native: LensDef[]; adapted: { lens: LensDef; adapter: AdapterInfo }[] } {
   const native = LENSES.filter((l) => l.mount === mount);
-  const adapted = ADAPTERS.filter((a) => a.cameraMount === mount).flatMap((a) => LENSES.filter((l) => l.mount === a.lensMount).map((lens) => ({ lens, adapter: a })));
+  const adapted: { lens: LensDef; adapter: AdapterInfo }[] = [];
+  for (const lens of LENSES) {
+    if (lens.mount === mount) continue;
+    const ad = adapterFor(lens.mount, mount);
+    if (ad) adapted.push({ lens, adapter: ad });
+  }
+  // Speed boosters as an extra option where we know one.
+  for (const a of ADAPTERS.filter((x) => x.cameraMount === mount && x.focalFactor !== 1)) for (const lens of LENSES.filter((l) => l.mount === a.lensMount)) adapted.push({ lens, adapter: a });
   return { native, adapted };
 }

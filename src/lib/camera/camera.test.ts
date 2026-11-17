@@ -1,3 +1,4 @@
+import { mountInfo } from './mounts';
 import { describe, expect, it } from 'vitest';
 import { BODIES, body } from './bodies';
 import { LENSES, lensesFor, maxApertureAt, lensDef } from './lenses';
@@ -15,8 +16,10 @@ describe('camera database', () => {
   it('only suggests lenses that fit, with real adapters', () => {
     const rf = lensesFor('RF');
     expect(rf.native.every((l) => l.mount === 'RF')).toBe(true);
-    expect(rf.adapted.every((a) => a.lens.mount === 'EF')).toBe(true);
-    expect(lensesFor('X').adapted).toHaveLength(0);
+    // Adapted lenses must sit further from the sensor than the camera's flange, so the adapter can fill the gap.
+    expect(rf.adapted.every((a) => (mountInfo(a.lens.mount)?.flange ?? 0) > (mountInfo('RF')?.flange ?? 99))).toBe(true);
+    expect(rf.adapted.some((a) => a.lens.mount === 'EF')).toBe(true);
+    expect(lensesFor('EF').adapted.some((a) => a.lens.mount === 'E' || a.lens.mount === 'RF')).toBe(false);
     expect(LENSES.find((l) => l.mount === 'E' && rf.native.includes(l))).toBeUndefined();
   });
   it('variable-aperture zooms close down as they zoom', () => {
