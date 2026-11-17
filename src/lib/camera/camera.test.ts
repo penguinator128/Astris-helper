@@ -77,3 +77,33 @@ describe('camera settings', () => {
     expect(at180).toBeGreaterThan(10);
   });
 });
+
+import { balanceExposure, exposureOffset, REF_LIGHT } from './settings';
+import { withRigNd, ndOnRig } from './nd';
+import { TEMPLATES, gearFromTemplate } from '@/lib/gear/catalog';
+
+describe('exposure', () => {
+  const fx3 = () => {
+    const g = gearFromTemplate(TEMPLATES.find((t) => t.id === 'body-sony-fx3')!);
+    return g;
+  };
+  it('reads zero at the reference light and settings', () => {
+    const c = { ...fx3().camera!, iso: 800, aperture: 2.8, shutterMode: 'speed' as const, shutterSpeed: 1 / 48 };
+    expect(exposureOffset(c, REF_LIGHT)).toBeCloseTo(0, 5);
+    expect(exposureOffset(c, REF_LIGHT * 4)).toBeCloseTo(2, 5);
+  });
+  it('balances with ISO and aperture, keeping the shutter', () => {
+    const c = { ...fx3().camera!, iso: 800, aperture: 2.8 };
+    const out = balanceExposure(c, REF_LIGHT / 4, undefined, 0);
+    expect(Math.abs(exposureOffset(out, REF_LIGHT / 4))).toBeLessThan(0.4);
+    expect(out.shutterAngle).toBe(c.shutterAngle);
+  });
+  it('uses ND first in bright light and drops it when the filter leaves the rig', () => {
+    const cam = fx3();
+    const vnd = { ...gearFromTemplate(TEMPLATES.find((t) => t.id === 'vnd-82')!), rigOf: cam.id };
+    expect(ndOnRig(cam.id, [cam, vnd])).toMatchObject({ min: 2, max: 5 });
+    const out = balanceExposure(cam.camera!, REF_LIGHT * 16, undefined, 5);
+    expect(out.ndStops).toBeGreaterThanOrEqual(2);
+    expect(withRigNd(out, cam.id, [cam]).ndStops).toBe(0);
+  });
+});

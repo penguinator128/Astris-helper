@@ -15,7 +15,8 @@ import { useProject, useProjects } from '@/store/projects';
 import { useSettings } from '@/store/settings';
 import { envOf, FIXTURES, DIFFUSION, fixtureInfo } from '@/lib/light/environment';
 import { EnvironmentPanel } from './EnvironmentPanel';
-import { cameraConfig } from '@/lib/camera/settings';
+import { cameraConfig, exposureLabel, exposureOffset } from '@/lib/camera/settings';
+import { withRigNd } from '@/lib/camera/nd';
 import { toast } from '@/store/toast';
 import { uid } from '@/lib/id';
 import { useMedia } from '@/lib/useMedia';
@@ -91,7 +92,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   const camObjs = objects.filter((o) => o.type === 'camera');
   const lookCam = (selected?.type === 'camera' ? selected : undefined) ?? camObjs.find((o) => 'gearId' in o && o.gearId) ?? camObjs[0];
   const lookGear = lookCam && 'gearId' in lookCam ? project.gear.find((g) => g.id === lookCam.gearId) : undefined;
-  const lookConfig = lookGear?.category === 'camera' ? cameraConfig(lookGear) : undefined;
+  const lookConfig = lookGear?.category === 'camera' ? withRigNd(cameraConfig(lookGear), lookGear.id, project.gear) : undefined;
 
   /* ---------- persistence ---------- */
   const first = useRef(true);
@@ -395,7 +396,11 @@ function Editor({ initial }: { initial: LightingDiagram }) {
           <Blueprint tone="yellow" aria-live="polite" aria-label="Lighting readouts">
             <div className="readout-grid">
               <Readout label="Key to fill" value={ratioLabel(photometry.ratio)} size="sm" sub={Number.isFinite(photometry.ratioStops) ? `${fmtNum(photometry.ratioStops, 1)} stops` : 'add fill or a bounce'} />
-              <Readout label="Exposure at subject" value={Number.isFinite(photometry.exposureStops) ? `${photometry.exposureStops >= 0 ? '+' : ''}${fmtNum(photometry.exposureStops, 1)} st` : '—'} size="sm" sub="vs one 100% key at 2 m" />
+              {lookConfig && lookGear ? (
+                <Readout label={`Exposure · ${lookGear.name.replace(/ · .*/, '')}`} value={exposureLabel(exposureOffset(lookConfig, photometry.total)).text.split(' · ')[0]} size="sm" sub={`f/${lookConfig.aperture} · ISO ${lookConfig.iso}${lookConfig.ndStops ? ` · ND ${lookConfig.ndStops.toFixed(1)}` : ''} · ${Math.round(photometry.total * 800)} lux`} />
+              ) : (
+                <Readout label="Exposure at subject" value={Number.isFinite(photometry.exposureStops) ? `${photometry.exposureStops >= 0 ? '+' : ''}${fmtNum(photometry.exposureStops, 1)} st` : '—'} size="sm" sub="vs one 100% key at 2 m" />
+              )}
               <Readout label="Colour mix" value={photometry.mixKelvin ? `${Math.round(photometry.mixKelvin)} K` : '—'} size="sm" sub={photometry.warmest && photometry.coolest && photometry.warmest !== photometry.coolest ? `${photometry.warmest}–${photometry.coolest} K` : undefined} />
               <Readout label="Camera lens" value={`${project.camera.focalLength} mm · ${fmtNum(fov.horizontal, 0)}°`} size="sm" sub={sensor.name} />
             </div>

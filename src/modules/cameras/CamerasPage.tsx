@@ -14,7 +14,9 @@ import { uid } from '@/lib/id';
 import { BODIES, body as bodyById } from '@/lib/camera/bodies';
 import { LENSES, ADAPTERS, lensesFor, maxApertureAt, type LensDef } from '@/lib/camera/lenses';
 import { PROFILES, profile } from '@/lib/camera/profiles';
-import { cameraConfig, derive, normalise, shutterSeconds, warnings } from '@/lib/camera/settings';
+import { ISOS, STOPS, balanceExposure, cameraConfig, derive, exposureLabel, exposureOffset, normalise, shutterSeconds, warnings } from '@/lib/camera/settings';
+import { ndOnRig, withRigNd } from '@/lib/camera/nd';
+import { evaluate } from '@/lib/light/photometry';
 import { TEMPLATES, blankGear, gearFromTemplate, nextName, categoryInfo, type GearTemplate } from '@/lib/gear/catalog';
 import { check, checkProduction, portUsage, rigKey } from '@/lib/gear/autoconnect';
 import { defaultLight } from '@/modules/light/presets';
@@ -26,8 +28,6 @@ import './cameras.css';
 
 const LiveView = lazy(() => import('@/modules/light/LiveView'));
 
-const STOPS = [0.95, 1, 1.2, 1.4, 1.8, 2, 2.2, 2.5, 2.8, 3.2, 3.5, 4, 4.5, 5, 5.6, 6.3, 7.1, 8, 9, 10, 11, 13, 14, 16, 18, 20, 22];
-const ISOS = [50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800, 16000, 20000, 25600, 32000, 40000, 51200, 64000, 80000, 102400];
 const ANGLES = [45, 90, 144, 172.8, 180, 270, 360];
 const SPEEDS = [25, 30, 40, 48, 50, 60, 80, 100, 120, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 4000, 8000];
 const RIG_CATEGORIES: GearCategory[] = ['rigging', 'monitor', 'filter', 'support', 'battery', 'cable', 'adapter', 'mic', 'wireless', 'recorder', 'power'];
@@ -137,7 +137,8 @@ function BodyPicker({ open, onClose, onPick, title = 'Add a camera' }: { open: b
 function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
   const project = useProject();
   const patch = useProjects((s) => s.patchCurrent);
-  const config = cameraConfig(cam);
+  const config = withRigNd(cameraConfig(cam), cam.id, project.gear);
+  const nd = ndOnRig(cam.id, project.gear);
   const lensGear = project.gear.find((g) => g.id === config.lensGearId);
   const lens = lensGear?.lens;
   const b = bodyById(config.bodyId);
@@ -153,6 +154,11 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
   // The plan this camera stands on, or a small preview set.
   const placed = findPlaced(project.diagrams, cam.id);
   const scene = placed?.objects ?? PREVIEW_SCENE;
+  const env = placed?.environment ?? PREVIEW_ENV;
+  // One exposure reading: the light on the subject (lamps, room bounce, ambient, sun) plus the camera settings.
+  const subjectLight = evaluate(scene, env).total;
+  const expOff = exposureOffset(config, subjectLight);
+  const expLab = exposureLabel(expOff);
 
   const rig = project.gear.filter((g) => g.id !== cam.id && rigKey(g) === cam.id);
   const issues = checkProduction(project.gear, project.connections).filter((i) => i.gearIds.some((id) => id === cam.id || rig.some((r) => r.id === id)));
@@ -261,7 +267,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
         <Blueprint tone="ink" padding="none" title={`Camera ${letter(index)} · simulated image`} aside={<span className="tag tag--wash">Simulated</span>}>
           <div className="cam-view">
             <Suspense fallback={<div className="live-view" />}>
-              <LiveView objects={scene} mode={live} verticalFovDeg={d.vfov} cameraObjectId={placed?.id ?? 'pv-cam'} config={config} environment={placed?.environment ?? PREVIEW_ENV} />
+              <LiveView objects={scene} mode={live} verticalFovDeg={d.vfov} cameraObjectId={placed?.id ?? 'pv-cam'} config={config} environment={env} />
             </Suspense>
             <div className="cam-view__hud mono" aria-hidden>
               <span>{config.focalLength} mm · f/{config.aperture}</span>
@@ -280,9 +286,37 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
             <span className="micro">Not on a plan yet: showing a three-light preview in a white studio.</span>
           )}
         </div>
-        <p className="muted sim-note">
-          Physically based: field of view, depth of field and focus plane, exposure from aperture, shutter and ISO, motion blur from shutter time, Log encoding curves. Approximate: noise, white balance colour, picture profile looks and the monitoring LUT. Lighting comes from the plan, so the brightness is a guide, not a meter reading.
-        </p>
+        <div className={`exp-meter exp-meter--${expLab.level}`}>
+          <div className="exp-meter__head">
+            <span className="readout__label">Exposure at the subject</span>
+            <strong className="mono">{expLab.text}</strong>
+          </div>
+          <div className="exp-meter__bar" aria-hidden>
+            {[-3, -2, -1, 0, 1, 2, 3].map((t) => (
+              <span key={t} className="exp-meter__tick" style={{ left: `${((t + 3) / 6) * 100}%` }}>{t > 0 ? `+${t}` : t}</span>
+            ))}
+            {Number.isFinite(expOff) && <span className="exp-meter__needle" style={{ left: `${((Math.max(-3, Math.min(3, expOff)) + 3) / 6) * 100}%` }} />}
+          </div>
+          <div className="cluster">
+            <span className="micro">{Math.round(subjectLight * 800)} lux on the face{config.ndStops ? ` · ND ${config.ndStops.toFixed(1)} stops` : ''}</span>
+            {Number.isFinite(expOff) && Math.abs(expOff) > 0.3 && (
+              <Button size="sm" onClick={() => set(balanceExposure(config, subjectLight, lens, nd ? nd.max : 0))}>
+                Balance exposure
+              </Button>
+            )}
+          </div>
+          {expOff > 1 && !nd && <p className="tiny muted">Too much light and no ND on this rig. Add a variable ND in Add Equipment to keep your aperture and shutter.</p>}
+        </div>
+        <div className="sim-legend">
+          <div>
+            <span className="tag tag--ok">Physically simulated</span>
+            <p className="tiny">Field of view, depth of field and focus plane, exposure from aperture, shutter, ISO and ND, light falloff with distance, room bounce, motion blur from shutter time, Log encoding curves.</p>
+          </div>
+          <div>
+            <span className="tag tag--wash">Approximation</span>
+            <p className="tiny">Sensor noise, white balance colour, picture profile looks, colour space, the monitoring LUT, skin and surface materials. Use it to plan, then check on the real monitor.</p>
+          </div>
+        </div>
         <div className="readout-grid">
           <Readout label="Horizontal view" value={`${d.hfov.toFixed(1)}°`} />
           <Readout label="Vertical view" value={`${d.vfov.toFixed(1)}°`} />
@@ -337,6 +371,19 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
                 <SelectField label="Shutter speed" value={String(Math.round(1 / config.shutterSpeed))} onChange={(v) => set({ shutterSpeed: 1 / Number(v) })} options={SPEEDS.filter((s) => s >= config.fps).map((s) => ({ value: String(s), label: `1/${s}` }))} />
               )}
             </div>
+            {nd && (
+              <Stepper
+                label={`ND (${nd.name})`}
+                unit="stops"
+                value={config.ndStops ?? 0}
+                onChange={(v) => set({ ndStops: v < nd.min / 2 ? 0 : v })}
+                min={0}
+                max={nd.max}
+                step={nd.min === nd.max ? nd.max : 1 / 3}
+                decimals={1}
+                hint={nd.min === nd.max ? 'Fixed filter: in or out.' : `Variable ND from ${nd.min} to ${nd.max} stops. Below ${nd.min} means out of the light path.`}
+              />
+            )}
             <SelectField label={b.usesEI ? 'ISO / EI' : 'ISO'} value={String(config.iso)} onChange={(v) => set({ iso: Number(v), ei: Number(v) })} options={[...new Set([...isos, config.iso])].sort((a, z) => a - z).map((i) => ({ value: String(i), label: `${i}${b.nativeIso.includes(i) ? '  (native)' : ''}` }))} />
           </div>
         </Blueprint>

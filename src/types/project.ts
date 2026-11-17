@@ -379,6 +379,8 @@ export interface CameraConfig {
   chroma: string;
   stabilisation: string;
   monitorLut: boolean;
+  /** Neutral density in front of the lens, stops. Only set when the rig has an ND filter. */
+  ndStops?: number;
   height: number; // lens height above the floor, metres
   tilt: number; // degrees, negative looks down
   panSpeed: number; // degrees per second, for the motion-blur simulation
