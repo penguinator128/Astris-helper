@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { CameraConfig, DiagramObject, DiagramLight, Environment } from '@/types/project';
+import type { CameraConfig, DiagramObject, DiagramLight, DiagramSubject, Environment, FurnitureKind } from '@/types/project';
+import { furnitureInfo, isFurniture, poseOf, seatOf } from '@/lib/scene/pose';
 import { effectiveLight, envOf, ambientRel, roomBounceRel } from '@/lib/light/environment';
 import { applyGrade, gradeMaterial } from './grade';
 import { derive } from '@/lib/camera/settings';
@@ -29,36 +30,138 @@ function lightRgb(l: DiagramLight): THREE.Color {
   return new THREE.Color(r / 255, g / 255, b / 255);
 }
 
-function buildMannequin(): THREE.Group {
+/**
+ * A simple jointed figure, 1.7 m tall, posed. Joints: hips at 0.80 m, knees at 0.44 m, shoulders at 1.38 m.
+ * Scale it by height / 1.7.
+ */
+function buildMannequin(subject?: DiagramSubject): THREE.Group {
   const g = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({ color: 0xb59a80, roughness: 0.7, metalness: 0 });
   const cloth = new THREE.MeshStandardMaterial({ color: 0x5a5a60, roughness: 0.9, metalness: 0 });
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 32, 24), skin);
-  head.position.set(0, 1.56, 0);
+  const pose = subject ? poseOf(subject) : 'standing';
+  const scale = subject ? subject.height / 1.7 : 1;
+  const seat = subject ? seatOf(subject) / scale : 0;
+  const lean = THREE.MathUtils.degToRad(subject?.lean ?? (pose === 'couch' ? 12 : 0));
+  const parts: THREE.Mesh[] = [];
+  const mesh = (geo: THREE.BufferGeometry, m: THREE.Material) => {
+    const x = new THREE.Mesh(geo, m);
+    parts.push(x);
+    return x;
+  };
+  // Upper body hangs from a hip pivot.
+  const upper = new THREE.Group();
+  const head = mesh(new THREE.SphereGeometry(0.11, 32, 24), skin);
+  head.position.set(0, 0.76, 0);
   head.scale.set(0.92, 1.12, 1);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.05, 12), skin);
+  const nose = mesh(new THREE.ConeGeometry(0.022, 0.05, 12), skin);
   nose.rotation.x = Math.PI / 2;
-  nose.position.set(0, 1.54, 0.115);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 16), skin);
-  neck.position.set(0, 1.41, 0);
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.46, 6, 16), cloth);
-  torso.position.set(0, 1.05, 0);
+  nose.position.set(0, 0.74, 0.115);
+  const neck = mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 16), skin);
+  neck.position.set(0, 0.61, 0);
+  const torso = mesh(new THREE.CapsuleGeometry(0.17, 0.46, 6, 16), cloth);
+  torso.position.set(0, 0.25, 0);
   torso.scale.set(1.25, 1, 0.7);
-  const hips = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.1, 6, 16), cloth);
-  hips.position.set(0, 0.78, 0);
+  const hips = mesh(new THREE.CapsuleGeometry(0.15, 0.1, 6, 16), cloth);
+  hips.position.set(0, -0.02, 0);
   hips.scale.set(1.2, 1, 0.8);
-  const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.6, 6, 12), cloth);
-  legL.position.set(-0.09, 0.38, 0);
-  const legR = legL.clone();
-  legR.position.x = 0.09;
-  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.5, 6, 12), cloth);
-  armL.position.set(-0.26, 1.02, 0);
-  const armR = armL.clone();
-  armR.position.x = 0.26;
-  for (const m of [head, nose, neck, torso, hips, legL, legR, armL, armR]) {
+  upper.add(head, nose, neck, torso, hips);
+  const arm = (side: number) => {
+    const sh = new THREE.Group();
+    sh.position.set(side * 0.26, 0.5, 0);
+    const a = mesh(new THREE.CapsuleGeometry(0.05, 0.5, 6, 12), cloth);
+    a.position.y = -0.28;
+    sh.add(a);
+    upper.add(sh);
+    return sh;
+  };
+  const armL = arm(-1);
+  const armR = arm(1);
+  const leg = (side: number) => {
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.09, 0, 0);
+    const thigh = mesh(new THREE.CapsuleGeometry(0.078, 0.28, 6, 12), cloth);
+    thigh.position.y = -0.18;
+    const knee = new THREE.Group();
+    knee.position.y = -0.36;
+    const shin = mesh(new THREE.CapsuleGeometry(0.068, 0.3, 6, 12), cloth);
+    shin.position.y = -0.2;
+    knee.add(shin);
+    hip.add(thigh, knee);
+    return { hip, knee };
+  };
+  const L = leg(-1);
+  const R = leg(1);
+  const body = new THREE.Group();
+  body.add(upper, L.hip, R.hip);
+  g.add(body);
+  let hipY = 0.8;
+  const seatedPose = pose === 'chair' || pose === 'couch' || pose === 'bench' || pose === 'custom';
+  if (seatedPose && seat > 0.05) {
+    hipY = seat + 0.08;
+    for (const l of [L, R]) {
+      l.hip.rotation.x = -Math.PI / 2; // thighs forward
+      l.knee.rotation.x = Math.PI / 2 + Math.max(0, (0.44 - seat) * 2); // shins down, tucked if the seat is low
+    }
+    body.position.z = -0.12;
+    upper.rotation.x = -lean;
+    armL.rotation.x = armR.rotation.x = -0.5;
+  } else if (pose === 'kneeling') {
+    hipY = 0.5;
+    for (const l of [L, R]) l.knee.rotation.x = Math.PI / 2; // shins back along the floor
+    upper.rotation.x = -lean;
+  } else if (pose === 'walking') {
+    L.hip.rotation.x = 0.35;
+    R.hip.rotation.x = -0.35;
+    R.knee.rotation.x = 0.3;
+    armL.rotation.x = -0.3;
+    armR.rotation.x = 0.3;
+    hipY = 0.78;
+  } else if (pose === 'lying') {
+    // Lie along the facing direction, head at the front.
+    body.rotation.x = Math.PI / 2;
+    hipY = seat + 0.15;
+    body.position.z = 0.1;
+  } else {
+    upper.rotation.x = -lean;
+  }
+  body.position.y = hipY;
+  for (const m of parts) {
     m.castShadow = true;
     m.receiveShadow = true;
-    g.add(m);
+  }
+  return g;
+}
+
+/** Couch, chair, bench, stool, table or bed, sized from the plan. Front faces +z before rotation. */
+function buildFurniture(kind: FurnitureKind, w: number, d: number): THREE.Group {
+  const f = furnitureInfo(kind)!;
+  const g = new THREE.Group();
+  const fabric = new THREE.MeshStandardMaterial({ color: 0x6b6257, roughness: 0.95 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5b4636, roughness: 0.7 });
+  const box = (bw: number, bh: number, bd: number, x: number, y: number, z: number, m: THREE.Material) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), m);
+    b.position.set(x, y, z);
+    b.castShadow = true;
+    b.receiveShadow = true;
+    g.add(b);
+  };
+  const legs = (top: number, m: THREE.Material) => {
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.04, top, 0.04, sx * (w / 2 - 0.04), top / 2, sz * (d / 2 - 0.04), m);
+  };
+  if (kind === 'couch' || kind === 'armchair') {
+    box(w, f.seat, d * 0.8, 0, f.seat / 2, d * 0.1, fabric);
+    box(w, f.top, d * 0.2, 0, f.top / 2, -d * 0.4, fabric);
+    for (const sx of [-1, 1]) box(0.14, f.seat + 0.18, d, sx * (w / 2 - 0.07), (f.seat + 0.18) / 2, 0, fabric);
+  } else if (kind === 'chair') {
+    legs(f.seat - 0.03, wood);
+    box(w, 0.04, d, 0, f.seat - 0.02, 0, wood);
+    box(w, f.top - f.seat, 0.03, 0, (f.top + f.seat) / 2, -d / 2 + 0.015, wood);
+  } else if (kind === 'bench' || kind === 'stool' || kind === 'table') {
+    legs(f.top - 0.04, wood);
+    box(w, 0.04, d, 0, f.top - 0.02, 0, wood);
+  } else if (kind === 'bed') {
+    box(w, f.seat, d, 0, f.seat / 2, 0, fabric);
+    box(w, 0.9, 0.06, 0, 0.45, d / 2 - 0.03, wood);
   }
   return g;
 }
@@ -203,6 +306,14 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
     const subject = findSubject(objects);
     const sx = subject?.x ?? 0;
     const sy = subject?.y ?? 0;
+    // Re-pose the main figure.
+    for (const c of [...mannequin.children]) {
+      mannequin.remove(c);
+      c.traverse((m) => {
+        if (m instanceof THREE.Mesh) m.geometry.dispose();
+      });
+    }
+    for (const c of [...buildMannequin(subject ?? undefined).children]) mannequin.add(c);
     mannequin.position.set(sx, 0, -sy);
     mannequin.rotation.y = subject ? THREE.MathUtils.degToRad(-subject.rotation + 180) : 0;
     const subjectHeight = subject?.height ?? 1.7;
@@ -336,13 +447,13 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
       return m;
     };
     const subjects = objects.filter((o) => o.type === 'subject');
-    const firstCam = objects.find((o) => o.type === 'camera');
+    const firstCam = objects.find((o) => o.type === 'camera' && (!cameraObjectId || o.id === cameraObjectId)) ?? objects.find((o) => o.type === 'camera');
 
     for (const o of objects) {
       const pos = toThree(o.x, o.y, 0);
       if (o.type === 'subject' && o !== subjects[0]) {
         if (o.subjectKind === 'person') {
-          const m = buildMannequin();
+          const m = buildMannequin(o);
           m.position.set(pos.x, 0, pos.z);
           m.rotation.y = THREE.MathUtils.degToRad(-o.rotation + 180);
           m.scale.setScalar(o.height / 1.7);
@@ -416,6 +527,11 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
           box.rotation.y = -THREE.MathUtils.degToRad(o.rotation);
           add(box);
         }
+      } else if (o.type === 'zone' && isFurniture(o.zoneKind)) {
+        const f = buildFurniture(o.zoneKind, o.w, o.h);
+        f.position.set(pos.x, 0, pos.z);
+        f.rotation.y = THREE.MathUtils.degToRad(-o.rotation + 180);
+        add(f);
       } else if (o.type === 'zone') {
         const colour = o.zoneKind === 'base' ? 0xffc400 : o.zoneKind === 'nogo' || o.zoneKind === 'power' ? 0xb3261e : 0x9a978d;
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), new THREE.MeshStandardMaterial({ color: colour, transparent: true, opacity: o.zoneKind === 'base' ? 0.35 : 0.22, roughness: 1, depthWrite: false }));
@@ -438,7 +554,7 @@ export default function LiveView({ objects, mode, verticalFovDeg, cameraObjectId
       }
     }
     st.render();
-  }, [objects, mode]);
+  }, [objects, mode, cameraObjectId]);
 
   // Camera mode
   const prevMode = useRef<'camera' | 'orbit' | null>(null);

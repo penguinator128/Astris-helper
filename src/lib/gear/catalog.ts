@@ -1,4 +1,5 @@
 import type { Connector, DiagramObject, GearCategory, GearItem, GearPort, GearSpec, SignalKind } from '@/types/project';
+import { isFurniture } from '@/lib/scene/pose';
 import { BODIES, body as bodyById, type PortSpec as BodyPortSpec } from '@/lib/camera/bodies';
 import { LENSES, ADAPTERS } from '@/lib/camera/lenses';
 import { defaultConfig } from '@/lib/camera/settings';
@@ -63,7 +64,7 @@ export function layerOf(o: DiagramObject): PlanLayer | 'set' {
     case 'gear':
       return categoryInfo(o.category).layer;
     case 'zone':
-      return 'base';
+      return isFurniture(o.zoneKind) ? 'set' : 'base';
     default:
       return 'set';
   }

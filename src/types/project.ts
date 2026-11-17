@@ -169,8 +169,16 @@ export interface DiagramObjectBase {
 export interface DiagramSubject extends DiagramObjectBase {
   type: 'subject';
   subjectKind: 'person' | 'object';
-  height: number; // metres
+  height: number; // metres, standing height for a person
+  /** Missing on older plans: standing. */
+  pose?: Pose;
+  /** Seat height for seated poses, or the surface for lying, metres. */
+  seatHeight?: number;
+  /** Lean back (+) or forward (−), degrees. */
+  lean?: number;
 }
+
+export type Pose = 'standing' | 'chair' | 'couch' | 'bench' | 'kneeling' | 'lying' | 'walking' | 'custom';
 
 export interface DiagramCamera extends DiagramObjectBase {
   type: 'camera';
@@ -232,7 +240,8 @@ export interface DiagramGear extends DiagramObjectBase {
   gearId?: string;
 }
 
-export type ZoneKind = 'base' | 'village' | 'power' | 'staging' | 'makeup' | 'parking' | 'nogo' | 'other';
+export type ZoneKind = 'base' | 'village' | 'power' | 'staging' | 'makeup' | 'parking' | 'nogo' | 'other' | FurnitureKind;
+export type FurnitureKind = 'couch' | 'armchair' | 'chair' | 'bench' | 'table' | 'stool' | 'bed';
 
 export const ZONE_KINDS: { id: ZoneKind; label: string }[] = [
   { id: 'base', label: 'Home base' },

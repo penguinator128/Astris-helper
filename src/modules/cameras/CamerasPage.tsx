@@ -17,6 +17,7 @@ import { PROFILES, profile } from '@/lib/camera/profiles';
 import { ISOS, STOPS, balanceExposure, cameraConfig, derive, exposureLabel, exposureOffset, normalise, shutterSeconds, warnings } from '@/lib/camera/settings';
 import { ndOnRig, withRigNd } from '@/lib/camera/nd';
 import { evaluate } from '@/lib/light/photometry';
+import { framing, framingSummary } from '@/lib/scene/framing';
 import { TEMPLATES, blankGear, gearFromTemplate, nextName, categoryInfo, type GearTemplate } from '@/lib/gear/catalog';
 import { check, checkProduction, portUsage, rigKey } from '@/lib/gear/autoconnect';
 import { defaultLight } from '@/modules/light/presets';
@@ -159,6 +160,8 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
   const subjectLight = evaluate(scene, env).total;
   const expOff = exposureOffset(config, subjectLight);
   const expLab = exposureLabel(expOff);
+  const camObj = scene.find((o) => o.id === (placed?.id ?? 'pv-cam'));
+  const frames = camObj ? framing(scene, camObj, { height: config.height, tilt: config.tilt, hfov: d.hfov, vfov: d.vfov }) : [];
 
   const rig = project.gear.filter((g) => g.id !== cam.id && rigKey(g) === cam.id);
   const issues = checkProduction(project.gear, project.connections).filter((i) => i.gearIds.some((id) => id === cam.id || rig.some((r) => r.id === id)));
@@ -324,6 +327,7 @@ function CameraEditor({ cam, index }: { cam: GearItem; index: number }) {
           <Readout label="Depth of field" value={Number.isFinite(d.dof.total) ? `${(d.dof.total * 100).toFixed(d.dof.total < 1 ? 0 : 0)} cm` : '∞'} />
           <Readout label="Shutter" value={`1/${Math.round(1 / d.shutter)} · ${Math.round(d.angle * 10) / 10}°`} />
           <Readout label="Exposure vs f/2.8 1/48 ISO 800" value={`${d.cameraStops >= 0 ? '+' : ''}${d.cameraStops.toFixed(1)} stops`} />
+          <Readout label="Framing" value={framingSummary(frames)} />
           <Readout label="Noise" value={d.noiseLabel} />
           <Readout label="Motion blur" value={`${Math.round(d.subjectBlurPx)} px subject · ${Math.round(d.panBlurPx)} px pan`} />
         </div>

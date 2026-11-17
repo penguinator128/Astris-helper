@@ -15,7 +15,9 @@ import { useProject, useProjects } from '@/store/projects';
 import { useSettings } from '@/store/settings';
 import { envOf, FIXTURES, DIFFUSION, fixtureInfo } from '@/lib/light/environment';
 import { EnvironmentPanel } from './EnvironmentPanel';
-import { cameraConfig, exposureLabel, exposureOffset } from '@/lib/camera/settings';
+import { FURNITURE, POSES, bodyExtent, furnitureInfo, isFurniture, seatOf, seatPeople } from '@/lib/scene/pose';
+import { cameraConfig, derive, exposureLabel, exposureOffset } from '@/lib/camera/settings';
+import { framing, framingSummary } from '@/lib/scene/framing';
 import { withRigNd } from '@/lib/camera/nd';
 import { toast } from '@/store/toast';
 import { uid } from '@/lib/id';
@@ -28,7 +30,7 @@ import { evaluate, ratioLabel, EMITTING } from '@/lib/light/photometry';
 import { dayTimes, sunPosition, tzOffsetMinutes, zonedDate } from '@/lib/sun';
 import { fmtNum, pad2, todayIso } from '@/lib/format';
 import { downloadDataUrl, safeFilename } from '@/lib/download';
-import { LIGHT_KINDS, ZONE_KINDS, type Connection, type DiagramLight, type DiagramObject, type GearCategory, type GearItem, type LightingDiagram, type LightKind, type ZoneKind } from '@/types/project';
+import { LIGHT_KINDS, ZONE_KINDS, type Connection, type DiagramLight, type DiagramObject, type GearCategory, type GearItem, type LightingDiagram, type LightKind, type ZoneKind, type FurnitureKind, type DiagramZone } from '@/types/project';
 import { CATEGORIES, PLAN_VIEWS, TEMPLATES, categoryInfo, gearFromTemplate, inView, layerOf, nextName, planLinks, type GearTemplate, type PlanView } from '@/lib/gear/catalog';
 import { ConnectSheet } from '@/modules/gear/ConnectSheet';
 import { GearEditor } from '@/modules/gear/GearPage';
@@ -92,6 +94,14 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   const camObjs = objects.filter((o) => o.type === 'camera');
   const lookCam = (selected?.type === 'camera' ? selected : undefined) ?? camObjs.find((o) => 'gearId' in o && o.gearId) ?? camObjs[0];
   const lookGear = lookCam && 'gearId' in lookCam ? project.gear.find((g) => g.id === lookCam.gearId) : undefined;
+  // How each camera on the plan frames each person, from its real lens, height and tilt when it has settings.
+  const camFraming = camObjs.map((co) => {
+    const g = 'gearId' in co ? project.gear.find((x) => x.id === co.gearId && x.category === 'camera') : undefined;
+    const cfg = g ? cameraConfig(g) : undefined;
+    const dd = cfg ? derive(cfg) : undefined;
+    const lens = dd && cfg ? { height: cfg.height, tilt: cfg.tilt, hfov: dd.hfov, vfov: dd.vfov } : { height: 1.5, tilt: 0, hfov: fov.horizontal, vfov: fov.vertical };
+    return { id: co.id, label: co.label || 'Camera', frames: framing(objects, co, lens), lensNote: cfg ? `${cfg.focalLength} mm at ${cfg.height.toFixed(2)} m, tilt ${cfg.tilt}°` : `Project lens, ${project.camera.focalLength} mm at 1.5 m` };
+  });
   const lookConfig = lookGear?.category === 'camera' ? withRigNd(cameraConfig(lookGear), lookGear.id, project.gear) : undefined;
 
   /* ---------- persistence ---------- */
@@ -222,6 +232,16 @@ function Editor({ initial }: { initial: LightingDiagram }) {
     const at = spot('mark');
     place({ id: uid(), type: 'mark', x: at.x, y: at.y, rotation: 0, locked: false, label: `Mark ${objects.filter((o) => o.type === 'mark').length + 1}` });
   }
+  function addFurniture(kind: FurnitureKind) {
+    const f = furnitureInfo(kind)!;
+    const subj = objects.find((o) => o.type === 'subject');
+    const cam = objects.find((o) => o.type === 'camera');
+    const x = subj ? subj.x : 0;
+    const y = subj ? subj.y + 0.3 : 0.3;
+    // Face the camera if there is one.
+    const rotation = cam ? Math.round(aimDeg(x, y, cam.x, cam.y)) : 180;
+    place({ id: uid(), type: 'zone', zoneKind: kind, x, y, rotation, w: f.w, h: f.d, locked: false, label: `${f.label} ${objects.filter((o) => o.type === 'zone' && o.zoneKind === kind).length + 1}` });
+  }
   function addTalent() {
     const at = spot('talent');
     place({ id: uid(), type: 'subject', subjectKind: 'person', height: 1.7, x: at.x, y: at.y, rotation: 180, locked: false, label: `Talent ${objects.filter((o) => o.type === 'subject').length + 1}` });
@@ -309,7 +329,7 @@ function Editor({ initial }: { initial: LightingDiagram }) {
   }
 
   const gearCtx: GearCtx = { gear: project.gear, connections: project.connections, onConnect: setConnectFrom, onEditGear: setEditGear };
-  const propsPanel = selected ? <ObjectProps obj={selected} objects={objects} onChange={updateObj} onAim={() => aimAtSubject(selected)} onDelete={removeSelected} onDuplicate={duplicateSelected} unit={u} ctx={gearCtx} /> : <p className="small muted">Tap something on the plan to edit it.</p>;
+  const propsPanel = selected ? <ObjectProps obj={selected} objects={objects} onChange={updateObj} onAdd={(add) => commitObjects([...objects, ...add])} onAim={() => aimAtSubject(selected)} onDelete={removeSelected} onDuplicate={duplicateSelected} unit={u} ctx={gearCtx} /> : <p className="small muted">Tap something on the plan to edit it.</p>;
   const unplaced = project.gear.filter((g) => !placedGear.has(g.id) && g.category !== 'lens' && (view === 'all' || categoryInfo(g.category).layer === view));
   const templateButtons = (cats: GearCategory[]) =>
     TEMPLATES.filter((t) => cats.includes(t.category)).map((t) => (
@@ -473,6 +493,20 @@ function Editor({ initial }: { initial: LightingDiagram }) {
                   </div>
                 </Blueprint>
               )}
+              {(view === 'all' || view === 'camera') && (
+                <Blueprint title="Set and seating" index="S">
+                  <div className="stack stack--sm">
+                    <div className="cluster">
+                      {FURNITURE.map((f) => (
+                        <Button key={f.id} size="sm" variant="quiet" icon={<Plus size={14} />} onClick={() => addFurniture(f.id)}>
+                          {f.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="tiny muted">Select a couch, bench or bed to seat people on it. Select a person to set their pose.</p>
+                  </div>
+                </Blueprint>
+              )}
               {showLayer('lighting') && (
                 <>
                   <Blueprint title="Lights" index="B">
@@ -590,6 +624,25 @@ function Editor({ initial }: { initial: LightingDiagram }) {
           )}
           {panel === 'readouts' && (
             <div className="stack">
+              <Blueprint title="Framing" index="F" padding="tight">
+                <div className="stack stack--sm">
+                  {camFraming.length === 0 && <p className="tiny muted">Add a camera and a person to see how each camera frames them.</p>}
+                  {camFraming.map((c) => (
+                    <div key={c.id} className="stack stack--sm">
+                      <strong className="small">{c.label} · {framingSummary(c.frames)}</strong>
+                      <ul className="framing-list">
+                        {c.frames.map((f) => (
+                          <li key={f.id}>
+                            <span>{f.label}</span>
+                            <span className="mono tiny">{f.inFrame ? `${f.shot ?? '—'}${f.partly ? ' · cut by frame edge' : ''}` : 'out of frame'} · {f.distance.toFixed(1)} m</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="tiny muted">{c.lensNote}</span>
+                    </div>
+                  ))}
+                </div>
+              </Blueprint>
               <Blueprint title="Light at the subject" index="G" padding="tight">
                 <div className="light-list">
                   {objects
@@ -771,7 +824,7 @@ function ViewSummary({ view, objects, gear, connections, onSelect }: { view: Pla
   );
 }
 
-function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, unit, ctx }: { obj: DiagramObject; objects: DiagramObject[]; onChange: (id: string, d: Partial<DiagramObject>, key?: string) => void; onAim: () => void; onDelete: () => void; onDuplicate: () => void; unit: ReturnType<typeof useUnits>; ctx: GearCtx }) {
+function ObjectProps({ obj, objects, onChange, onAdd, onAim, onDelete, onDuplicate, unit, ctx }: { obj: DiagramObject; objects: DiagramObject[]; onChange: (id: string, d: Partial<DiagramObject>, key?: string) => void; onAdd: (objs: DiagramObject[]) => void; onAim: () => void; onDelete: () => void; onDuplicate: () => void; unit: ReturnType<typeof useUnits>; ctx: GearCtx }) {
   const subject = objects.find((o) => o.type === 'subject');
   const dist = subject ? Math.hypot(obj.x - subject.x, obj.y - subject.y) : null;
   const common = (
@@ -893,7 +946,27 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
             { value: 'object', label: 'Object' },
           ]}
         />
-        <Stepper label="Height" unit="m" value={obj.height} onChange={(v) => onChange(obj.id, { height: v }, 'h')} min={0.1} max={3} step={0.05} decimals={2} />
+        {obj.subjectKind === 'person' && (
+          <>
+            <SelectField
+              label="Pose"
+              value={obj.pose ?? 'standing'}
+              onChange={(v) => {
+                const p = POSES.find((x) => x.id === v)!;
+                onChange(obj.id, { pose: p.id, seatHeight: p.seat } as Partial<DiagramObject>);
+              }}
+              options={POSES.map((p) => ({ value: p.id, label: p.label }))}
+            />
+            {['chair', 'couch', 'bench', 'custom', 'lying'].includes(obj.pose ?? 'standing') && (
+              <div className="grid-2">
+                <Stepper label={obj.pose === 'lying' ? 'Lying on surface at' : 'Seat height'} unit="m" value={seatOf(obj)} onChange={(v) => onChange(obj.id, { seatHeight: v } as Partial<DiagramObject>, 'seat')} min={0} max={1.2} step={0.02} decimals={2} />
+                <Stepper label="Lean back" unit="°" value={obj.lean ?? (obj.pose === 'couch' ? 12 : 0)} onChange={(v) => onChange(obj.id, { lean: v } as Partial<DiagramObject>, 'lean')} min={-30} max={45} step={5} />
+              </div>
+            )}
+            <p className="tiny muted">Eyes at {bodyExtent(obj).eye.toFixed(2)} m, top of head at {bodyExtent(obj).top.toFixed(2)} m. Framing and lighting use these.</p>
+          </>
+        )}
+        <Stepper label={obj.subjectKind === 'person' ? 'Standing height' : 'Height'} unit="m" value={obj.height} onChange={(v) => onChange(obj.id, { height: v }, 'h')} min={0.1} max={3} step={0.05} decimals={2} />
         <p className="tiny muted">Rotation is the direction the subject faces. 180° faces the camera at the bottom of the plan.</p>
         {common}
       </div>
@@ -913,10 +986,15 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
     return (
       <div className="stack">
         <TextField label="Label" value={obj.label} onChange={(v) => onChange(obj.id, { label: v }, 'label')} />
-        <SelectField label="Area" value={obj.zoneKind} onChange={(v) => onChange(obj.id, { zoneKind: v as ZoneKind })} options={ZONE_KINDS.map((z) => ({ value: z.id, label: z.label }))} />
+        {isFurniture(obj.zoneKind) ? (
+          <SelectField label="Furniture" value={obj.zoneKind} onChange={(v) => { const f = furnitureInfo(v as ZoneKind)!; onChange(obj.id, { zoneKind: f.id, w: f.w, h: f.d }); }} options={FURNITURE.map((f) => ({ value: f.id, label: f.label }))} />
+        ) : (
+          <SelectField label="Area" value={obj.zoneKind} onChange={(v) => onChange(obj.id, { zoneKind: v as ZoneKind })} options={ZONE_KINDS.map((z) => ({ value: z.id, label: z.label }))} />
+        )}
+        {isFurniture(obj.zoneKind) && (furnitureInfo(obj.zoneKind)?.seats ?? 0) > 0 && <SeatPeople zone={obj} onAdd={onAdd} />}
         <div className="grid-2">
-          <Stepper label="Width" unit="m" value={obj.w} onChange={(v) => onChange(obj.id, { w: Math.max(0.5, v) }, 'w')} min={0.5} max={60} step={0.5} decimals={1} />
-          <Stepper label="Depth" unit="m" value={obj.h} onChange={(v) => onChange(obj.id, { h: Math.max(0.5, v) }, 'h')} min={0.5} max={60} step={0.5} decimals={1} />
+          <Stepper label="Width" unit="m" value={obj.w} onChange={(v) => onChange(obj.id, { w: Math.max(0.2, v) }, 'w')} min={0.2} max={60} step={isFurniture(obj.zoneKind) ? 0.05 : 0.5} decimals={isFurniture(obj.zoneKind) ? 2 : 1} />
+          <Stepper label="Depth" unit="m" value={obj.h} onChange={(v) => onChange(obj.id, { h: Math.max(0.2, v) }, 'h')} min={0.2} max={60} step={isFurniture(obj.zoneKind) ? 0.05 : 0.5} decimals={isFurniture(obj.zoneKind) ? 2 : 1} />
         </div>
         {common}
       </div>
@@ -953,6 +1031,24 @@ function ObjectProps({ obj, objects, onChange, onAim, onDelete, onDuplicate, uni
           5°
         </Button>
       </div>
+    </div>
+  );
+}
+
+function SeatPeople({ zone, onAdd }: { zone: DiagramZone; onAdd: (objs: DiagramObject[]) => void }) {
+  const f = furnitureInfo(zone.zoneKind)!;
+  const [n, setN] = useState(f.seats);
+  const [gap, setGap] = useState(() => Math.round(Math.min(0.7, (zone.w - 0.1) / f.seats) * 100) / 100);
+  return (
+    <div className="stack stack--sm">
+      <div className="grid-2">
+        <Stepper label="People" value={n} onChange={setN} min={1} max={12} step={1} />
+        <Stepper label="Spacing" unit="m" value={gap} onChange={setGap} min={0.3} max={1.5} step={0.05} decimals={2} />
+      </div>
+      <Button size="sm" icon={<Plus size={14} />} onClick={() => onAdd(seatPeople(zone, n, uid, gap))}>
+        Seat {n} {n === 1 ? 'person' : 'people'} on this {f.label.toLowerCase()}
+      </Button>
+      {n * gap > zone.w + 0.05 && <p className="tiny muted">That is {(n * gap).toFixed(2)} m of people on a {zone.w.toFixed(2)} m {f.label.toLowerCase()}: shoulders will overlap.</p>}
     </div>
   );
 }

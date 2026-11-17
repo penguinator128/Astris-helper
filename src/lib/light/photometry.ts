@@ -1,4 +1,5 @@
 import type { DiagramLight, DiagramObject, DiagramSubject, Environment, LightKind } from '@/types/project';
+import { bodyExtent } from '@/lib/scene/pose';
 import { ambientRel, effectiveLight, roomBounceRel } from './environment';
 import { kelvinToMired, miredToKelvin } from '@/lib/calc/light';
 
@@ -131,7 +132,8 @@ export function faceFactor(subjectRotation: number, subject: { x: number; y: num
 
 export function evaluate(objects: DiagramObject[], env?: Environment): Photometry {
   const subject = findSubject(objects);
-  const point = subject ? { x: subject.x, y: subject.y, z: Math.min(subject.height, SUBJECT_EYE_HEIGHT) } : { x: 0, y: 0, z: SUBJECT_EYE_HEIGHT };
+  // Posed subjects light at their real eye height; older plans keep the original 1.5 m.
+  const point = subject ? { x: subject.x, y: subject.y, z: subject.pose ? bodyExtent(subject).eye : Math.min(subject.height, SUBJECT_EYE_HEIGHT) } : { x: 0, y: 0, z: SUBJECT_EYE_HEIGHT };
   const lights = objects.filter((o): o is DiagramLight => o.type === 'light');
   let rawKey = 0;
   const contributions: Contribution[] = lights

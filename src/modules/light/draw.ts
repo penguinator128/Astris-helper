@@ -1,3 +1,4 @@
+import { isFurniture } from '@/lib/scene/pose';
 import type { DiagramObject, DiagramLight, DiagramCamera, DiagramGear, DiagramZone, DiagramMark, SignalKind } from '@/types/project';
 import { categoryInfo, inView, type PlanView } from '@/lib/gear/catalog';
 import { kelvinToHex } from '@/lib/colour/kelvin';
@@ -469,6 +470,26 @@ function drawZone(ctx: CanvasRenderingContext2D, z: DiagramZone, v: View, ink: s
   ctx.save();
   ctx.translate(sx, sy);
   ctx.rotate((z.rotation * Math.PI) / 180);
+  if (isFurniture(z.zoneKind)) {
+    // Furniture: solid piece, its back drawn heavy so you can see which way it faces (front = rotation direction).
+    ctx.fillStyle = dark ? 'rgba(243,241,234,0.16)' : 'rgba(11,11,12,0.12)';
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeStyle = selected ? '#FFC400' : ink;
+    ctx.lineWidth = selected ? 2.5 : 1.5;
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    if (z.zoneKind !== 'table' && z.zoneKind !== 'stool') {
+      ctx.lineWidth = Math.max(3, h * 0.18);
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, h / 2 - ctx.lineWidth / 2);
+      ctx.lineTo(w / 2, h / 2 - ctx.lineWidth / 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = dark ? '#f3f1ea' : '#0b0b0c';
+    ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillText(z.label.toUpperCase(), -w / 2 + 4, -h / 2 - 4);
+    ctx.restore();
+    return;
+  }
   const fill = ZONE_FILL[z.zoneKind] ?? ['rgba(11,11,12,0.04)', 'rgba(243,241,234,0.05)'];
   ctx.fillStyle = dark ? fill[1] : fill[0];
   ctx.fillRect(-w / 2, -h / 2, w, h);
