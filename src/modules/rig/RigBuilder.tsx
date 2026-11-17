@@ -259,7 +259,7 @@ function Builder({ cam }: { cam: GearItem }) {
       />
       <div className="rig-layout">
         <div className="stack stack--sm">
-          <div className="rig-stage" ref={hostRef} role="img" aria-label={`3D rig: ${[cam, ...items].map((g) => g.name).join(', ')}`} />
+          <div className="rig-stage" ref={hostRef} role="group" aria-label={`3D rig: ${[cam, ...items].map((g) => g.name).join(', ')}`} />
           <div className="cluster">
             <Button size="sm" active={mode === 'move'} icon={<Move size={14} />} onClick={() => setMode(mode === 'move' ? 'view' : 'move')}>
               {mode === 'move' ? 'Moving: drag the arrows' : 'Move parts'}

@@ -10,13 +10,14 @@ The **Shoot Plan** is the heart of the app. Everything else either feeds it or c
 
 | No. | Section | What it does |
 | --- | --- | --- |
-| 01 | Shoot Plan | One top-down plan per set-up. Place talent, marks, cameras, monitors, lights, modifiers, mics, wireless, recorders, home base and other areas. Switch between **All, Camera, Lighting, Audio and Base** views; other layers dim. Connection lines show what plugs into what. Lighting readouts, a sun-path overlay and a live three.js view are built in. Each view exports as PNG. |
-| 02 | Gear | Your kit with names, make and model, quantity, power and every **input and output** (connector and signal). Connect an output to an input and the cable is worked out. The **equipment list builds itself** from your gear, the plan and the connections: stands, sandbags, cables, batteries, chargers, cards, headphones and home-base kit. CSV downloads, and one tap adds it to the packing checklist. |
-| 03 | Shot List | Scenes and shots with lens, movement, status, filters and CSV export. Shots link to set-ups. |
-| 04 | Storyboard | Frames from compositions, images or a sketch tool, with captions, dialogue and timing. |
-| 05 | Call Sheet | Date, call time, location with a map link, a daylight summary, cast and crew, schedule and notes. |
-| 06 | Packing Checklist | Tick off the generated equipment list and template groups as you pack. |
-| 07 | Shoot Pack | A4 PDF of everything: the plan for each set-up with all four department views, kit tables, equipment list, gear with inputs and outputs, connections, call sheet and more. Also PNG, CSV and JSON downloads. |
+| 01 | Shoot Plan | One top-down plan per set-up (scene, with scene number and camera notes). Place talent, furniture, marks, cameras, monitors, lights, modifiers, mics, wireless, recorders, home base and other areas. Switch between **All, Camera, Lighting, Audio and Base** views; other layers dim. Each set-up has an **environment** (white studio, dark studio, daylight, overcast, natural or warm indoor, low light, or custom walls, floor, reflectance, ambient light and sun). Lights have fixture type, diffusion, power, colour, height, tilt, beam and distance. People can stand, sit on a chair, couch or bench, kneel, lie or walk, and a couch can be filled with any number of people. Readouts show exposure through the chosen camera and how every camera frames every person. The live three.js view looks through a real camera's settings. Each view exports as PNG. |
+| 02 | Cameras | Camera A, B, C and more, each with its own body, lens (only lenses that fit the mount, or that fit through a real adapter), aperture, shutter angle or speed, ISO/EI, ND, white balance and tint, focus, resolution, frame rate, codec, bit depth, chroma, picture profile, colour space, stabilisation, height and tilt. The settings check each other (Log forces 10-bit where the codec allows, frame rates follow resolution, apertures follow the lens at that focal length). A **simulated image** updates live: true field of view, thin-lens depth of field, exposure, motion blur, white balance, ISO noise, Log curves and a monitoring LUT. An exposure meter combines the light on the subject with the settings, and **Balance exposure** fixes it without touching the shutter. **Add Equipment** puts cages, handles, rails, arms, monitors, follow focus, matte boxes, filters, supports, batteries, cables and audio on the rig, and **Auto Connect** proposes only compatible links for you to approve. Each camera has a **3D rig builder** (blueprint style, drag, turn, replace, remove, PNG). The **camera department setup sheet** (PDF or print) is here too. |
+| 03 | Gear | Your kit with names, make and model, quantity, power and every **input and output** (connector, signal, mount standard, voltage, phantom power). The **Connections** tab is a production overview: ports in use, cables needed against cables owned, missing and incompatible items, Auto Connect for everything, connecting by hand, notes and a port map per item. The **equipment list builds itself** from your gear, the plan and the connections: stands, sandbags, cables, batteries, chargers, cards, headphones and home-base kit. CSV downloads, and one tap adds it to the packing checklist. |
+| 04 | Shot List | Scenes and shots with lens, movement, status, filters and CSV export. Shots link to set-ups. |
+| 05 | Storyboard | Frames from compositions, images or a sketch tool, with captions, dialogue and timing. |
+| 06 | Call Sheet | Date, call time, location with a map link, a daylight summary, cast and crew, schedule and notes. |
+| 07 | Packing Checklist | Tick off the generated equipment list and template groups as you pack. |
+| 08 | Shoot Pack | A4 PDF of everything: the plan for each set-up with all four department views, kit tables, equipment list, gear with inputs and outputs, connections, call sheet and more. Also PNG, CSV and JSON downloads. |
 
 ### Toolkit
 
@@ -76,7 +77,9 @@ The wordmark is a single replaceable asset in three places:
 
 ## Data and privacy
 
-All data lives in the browser's IndexedDB on the device: projects, settings and uploaded images (downscaled to 1600 px). Nothing is sent anywhere. Back up from **Shoot Pack → Backup**: export one project or all projects as JSON (images included), and import on another device. Imports never overwrite; a project that already exists arrives as a copy.
+All data lives in the browser's IndexedDB on the device: production plans, settings and uploaded images (downscaled to 1600 px). Nothing is sent anywhere. **My Production Plans** lists every plan to open, rename, duplicate, download or delete. Plans save as you work, and the app asks the browser to keep its storage persistent.
+
+Every stored plan carries a schema version. When an update changes the stored shape, the original is backed up on the device before it is upgraded. A daily copy and a copy before every delete are kept too (eight per plan), and **restoring always creates a new plan**, so nothing is overwritten. Back up to another device from **Shoot Pack → Backup** (JSON with images). Imports never overwrite; a plan that already exists arrives as a copy.
 
 ## Decisions
 
@@ -87,13 +90,17 @@ All data lives in the browser's IndexedDB on the device: projects, settings and 
 - **PDF fonts:** jsPDF needs TrueType, and fontsource ships WOFF. `scripts/woff-to-ttf.mjs` converts the self-hosted Inter Tight and IBM Plex Mono files at build time (`prebuild`), so PDF text is real, selectable vector text in the brand fonts. The same fonts are embedded when SVGs are rasterised, so award cards and frame PNGs match the app.
 - **Images:** replaced or orphaned images are cleaned up at start-up rather than deleted immediately, so duplicated and imported projects keep their images.
 - **Equipment list rules:** counts use the busiest set-up, because kit moves between set-ups. Each light or modifier needs a stand and each stand a sandbag; each camera position needs support; batteries are one per device plus a spare; cards are two per recording device. Every line says why it is there.
+- **Camera simulation:** physically based where the maths is standard: field of view from sensor and focal length; thin-lens depth of field and blur disc size; exposure from aperture, shutter, ISO and ND against a reference of f/2.8, 1/48 s, ISO 800 at about 200 lux; motion blur from shutter time; the makers' published S-Log3, C-Log, C-Log2, C-Log3, V-Log and F-Log2 curves. Approximations: sensor noise, white balance colour, the look of standard and cine profiles, HLG and BMD Film, colour spaces and the monitoring LUT. The app labels which is which. Flicker warnings assume Australian 50 Hz mains.
+- **Camera and lens data:** published mounts, sensor sizes, ISO ranges, dual native ISOs, resolutions and frame rates, codecs, ports, sizes and weights for the bodies and lenses in the database, plus generic DSLR, mirrorless and cinema bodies. Check unusual modes against your manual.
+- **Compatibility:** Auto Connect only joins matching mounts and standards (lens mounts, filter threads, battery types, NATO, 1/4-20, shoes), checks voltages and phantom power, keeps each item on one camera's rig, puts supports under the rig and never forces a link. It proposes; you approve all or some.
+- **Room light:** bright walls are modelled as an integrating sphere, E = ρ / (1 − ρ) × Φ / A, so a white room adds real fill to the readouts and the 3D view. Ambient light and sun are in lux.
 - **Lighting maths:** a planning model, not a light meter. Illuminance falls off with the square of distance, light outside the beam falls to 10% spill, flags pass 8% and diffusion 55%, bounce cards return 60% of what reaches them, and light from behind the subject counts less at the face. Exposure is relative to a single 100% key at 2 m.
 - **Theme:** light by default, with an On-set dark theme. The device's colour-scheme preference is used only on first run.
 - **Units and copy:** metric by default with an imperial toggle, 24-hour time, Australian English.
 
 ## Verification
 
-- **Unit tests:** 76 tests across calculators, sun and moon, colour, photometry, gear and the equipment list, shot-size classification, timecode, slate and backup helpers, including the reference values in the brief (hyperfocal 10.83 m, 39.6° horizontal FOV, 10-stop ND to 8.2 s, 1/48 s at 24 fps, 45 GB per hour at 100 Mbps).
+- **Unit tests:** 102 tests across camera settings and Log curves, exposure balance and ND, Auto Connect compatibility, environments and room bounce, poses and framing, calculators, sun and moon, colour, photometry, gear and the equipment list, shot-size classification, timecode, slate and backup helpers, including the reference values in the brief (hyperfocal 10.83 m, 39.6° horizontal FOV, 10-stop ND to 8.2 s, 1/48 s at 24 fps, 45 GB per hour at 100 Mbps).
 - **Accessibility:** axe-core reports no WCAG 2.1 AA or best-practice violations on any of the 25 routes, in both themes. Focus rings, keyboard reordering, a skip link, focus-trapped sheets and `aria-live` results are in place, and reduced motion is respected.
 - **Lighthouse 12 (home):** performance 94 on the simulated mobile profile and 100 on desktop; accessibility, best practices and SEO 100.
 - **PWA:** Lighthouse 12 no longer has a PWA category, so it was audited with Lighthouse 11.7.1: installable manifest, maskable icon, splash screen, themed address bar, viewport and content width all pass.
@@ -102,7 +109,8 @@ All data lives in the browser's IndexedDB on the device: projects, settings and 
 ## Known limits
 
 - The call sheet does not fetch a weather forecast, because the app is offline-first. Sun and moon conditions are calculated on the device, with a free-text field for the forecast.
-- The 3D view is stylised: mannequins for talent, simple shapes for cameras on tripods, mics on stands, monitors, kit and walls, and tinted floor areas for home base and the rest. Camera view is lit only by your plan's lights; orbit adds a soft work light so the layout reads. It shows direction, ratio and colour, not physically exact light transport.
+- The simulated camera image is a planning aid. Brightness follows the plan's lights and room, so check exposure with the camera's own tools on the day.
+- The 3D view is stylised: posed mannequins for talent, simple shapes for cameras on tripods, mics on stands, monitors, kit and walls, and tinted floor areas for home base and the rest. Camera view is lit only by your plan's lights; orbit adds a soft work light so the layout reads. It shows direction, ratio and colour, not physically exact light transport.
 - Codec bitrates, pixel pitches and gel values are typical figures. Check them against your camera and gel swatch book.
 - Map tiles need a connection the first time an area is viewed.
 - Wake Lock needs a browser that supports it (iOS Safari 16.4 or later). Vibration on clap is Android only.

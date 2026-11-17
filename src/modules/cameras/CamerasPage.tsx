@@ -90,9 +90,9 @@ export default function CamerasPage() {
         }
       />
       <div className="stack">
-        <div className="cam-switch" role="tablist" aria-label="Cameras">
+        <div className="cam-switch" role="group" aria-label="Cameras">
           {cameras.map((g, i) => (
-            <button key={g.id} role="tab" aria-selected={g.id === current?.id} className={`cam-tab ${g.id === current?.id ? 'is-on' : ''}`} onClick={() => setParams({ cam: g.id }, { replace: true })}>
+            <button key={g.id} type="button" aria-pressed={g.id === current?.id} className={`cam-tab ${g.id === current?.id ? 'is-on' : ''}`} onClick={() => setParams({ cam: g.id }, { replace: true })}>
               <span className="cam-tab__letter">{letter(i)}</span>
               <span className="cam-tab__name">{cameraConfig(g).model}</span>
             </button>
