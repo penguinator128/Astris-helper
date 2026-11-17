@@ -694,7 +694,12 @@ function EquipmentSheet({ open, onClose, cam, rig }: { open: boolean; onClose: (
     return probe.ports.length ? { label: 'Needs another part first', tone: 'wash' } : { label: 'Carried, no connection', tone: 'wash' };
   }
   function add(t: GearTemplate) {
-    const g = { ...gearFromTemplate(t, nextName(project.gear, t.category, t.name)), rigOf: cam.id };
+    let g: GearItem = { ...gearFromTemplate(t, nextName(project.gear, t.category, t.name)), rigOf: cam.id };
+    // A dummy battery takes the shape of this camera's battery.
+    if (t.id === 'dummy-battery') {
+      const b = bodyOf(cameraConfig(cam));
+      g = { ...g, name: `Dummy ${b.battery} (D-tap)`, ports: g.ports.map((p) => (p.connector === 'Battery plate' ? { ...p, standard: b.battery, vOut: +((b.volts[0] + b.volts[1]) / 2).toFixed(1) } : p)) };
+    }
     patch((p) => ({ gear: [...p.gear, g] }));
     toast(`Added ${g.name}. Use Auto Connect to hook it up.`);
   }

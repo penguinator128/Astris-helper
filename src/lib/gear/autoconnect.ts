@@ -46,7 +46,7 @@ const HOSTS: Record<string, Record<string, number>> = {
   'video-tx': { cage: 40, 'top-handle': 35, body: 20 },
   'follow-focus': { 'rod-plate': 40 },
   'matte-box': { 'rod-plate': 40 },
-  'vmount-plate': { 'rod-plate': 40 },
+  'vmount-plate': { 'rod-plate': 40, cage: 30 },
   filter: { lens: 40 },
   'filter-tray': { 'matte-box': 40 },
   lens: { body: 40, adapter: 45 },
@@ -98,6 +98,7 @@ export function check(fg: GearItem, fp: GearPort, tg: GearItem, tp: GearPort): C
     const k = kind(tg);
     if (['tripod', 'monopod', 'gimbal', 'rod-plate'].includes(k) && fg.ports.some(isBase) && !isBase(fp)) return no(`${tg.name} goes under ${fg.name}, on its base`);
     if (['monitor', 'top-handle', 'side-handle', 'nato-rail', 'arm', 'mic-oncam', 'wireless-rx', 'video-tx'].includes(k) && isBase(fp)) return no(`${fp.name} is underneath; ${tg.name} goes on top or at the side`);
+    if (k === 'vmount-plate' && /top/i.test(fp.name)) return no(`A battery plate goes on the side or back, not on ${fp.name}`);
     const what = fp.connector === 'Lens mount' ? `${fp.standard ?? ''} mount` : fp.connector === 'Filter thread' ? `${fp.standard} thread` : fp.connector;
     return { ok: true, score: 60 + (bonus ?? 10), reason: `${tg.name} on ${fg.name} (${what})` };
   }
