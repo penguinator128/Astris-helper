@@ -90,3 +90,16 @@ export async function dbClearAll(): Promise<void> {
   const db = await getDB();
   await Promise.all([db.clear('projects'), db.clear('settings'), db.clear('images'), db.clear('meta')]);
 }
+
+/** Every meta row whose key starts with the prefix (used for backups). */
+export async function dbListMeta<T>(prefix: string): Promise<{ key: string; value: T }[]> {
+  const db = await getDB();
+  const range = IDBKeyRange.bound(prefix, prefix + '\uffff');
+  const rows = await db.getAll('meta', range);
+  return rows.map((r) => ({ key: r.key, value: r.value as T }));
+}
+
+export async function dbDeleteMeta(key: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('meta', key);
+}

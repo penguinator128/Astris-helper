@@ -28,7 +28,7 @@ export function ProjectSwitcher({ open, onClose }: Props) {
 
   return (
     <>
-      <Sheet open={open} onClose={onClose} title="Projects">
+      <Sheet open={open} onClose={onClose} title="My Production Plans">
         <div className="stack">
           <div className="rows">
             {list.map((p) => {
@@ -127,12 +127,12 @@ export function ProjectSwitcher({ open, onClose }: Props) {
         onConfirm={() => {
           if (deleting) {
             remove(deleting);
-            toast('Project deleted');
+            toast('Plan deleted. A backup is kept in My Production Plans.');
           }
         }}
-        title="Delete this project?"
-        body="Shots, storyboard, diagrams, palettes and the call sheet in this project will be removed from this device. This cannot be undone."
-        confirmLabel="Delete project"
+        title="Delete this plan?"
+        body="It leaves your list. A backup copy stays on this device and can be restored from My Production Plans."
+        confirmLabel="Delete plan"
         danger
       />
     </>

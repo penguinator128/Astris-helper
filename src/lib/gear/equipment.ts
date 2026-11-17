@@ -67,6 +67,17 @@ export function cablesFor(gear: GearItem[], connections: Connection[]): Map<stri
   return out;
 }
 
+/** Cables of this kind already in the gear list (by name or model). */
+export function ownedCables(gear: GearItem[], name: string): number {
+  const n = name.toLowerCase();
+  return gear.filter((g) => g.category === 'cable' && (g.name.toLowerCase() === n || g.model.toLowerCase() === n || g.name.toLowerCase().replace(/ \d+$/, '') === n)).reduce((a, g) => a + Math.max(1, g.qty), 0);
+}
+
+/** Cables the connections need against what you own. */
+export function cableSummary(gear: GearItem[], connections: Connection[]): { name: string; need: number; owned: number }[] {
+  return [...cablesFor(gear, connections)].map(([name, need]) => ({ name, need, owned: ownedCables(gear, name) })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Everything the plan and gear list imply you need to bring. */
 export function equipmentList(project: Project): EquipRow[] {
   const rows: EquipRow[] = [];
@@ -129,7 +140,7 @@ export function equipmentList(project: Project): EquipRow[] {
 
   // 3. Cables from the connection list, less any already on the gear list.
   for (const [name, n] of cablesFor(project.gear, project.connections)) {
-    const owned = project.gear.filter((g) => g.category === 'cable' && g.name.toLowerCase() === name.toLowerCase()).reduce((a, g) => a + g.qty, 0);
+    const owned = ownedCables(project.gear, name);
     if (n > owned) rows.push({ group: 'Cables and adaptors', name, qty: n - owned, why: owned ? `Connections need ${n}; your gear list has ${owned}` : 'From the connection list' });
   }
 

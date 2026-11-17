@@ -3,8 +3,12 @@ import { uid } from '@/lib/id';
 import type { CallSheet, CameraSetup, Project, SlateState } from '@/types/project';
 import { dbDeleteProject, dbGetAllProjects, dbGetMeta, dbPutMeta, dbPutProject } from './db';
 import { useSettings } from './settings';
+import { backupProject, lastBackupAt } from './backups';
 
 const CURRENT_KEY = 'currentProjectId';
+/** Bump when the stored shape changes. Plans saved by an older version are backed up before they are upgraded. */
+export const SCHEMA_VERSION = 3;
+const DAY = 24 * 60 * 60 * 1000;
 
 function todayIso(): string {
   const d = new Date();
@@ -77,6 +81,7 @@ export function createEmptyProject(name: string): Project {
     slate: emptySlate(name),
     gear: [],
     connections: [],
+    schema: SCHEMA_VERSION,
   };
 }
 
@@ -87,6 +92,7 @@ export function migrateProject(p: Project): Project {
   for (const key of ['shots', 'storyboard', 'diagrams', 'compositions', 'palettes', 'colourScript', 'plans', 'checklist', 'awards', 'gear', 'connections'] as const) {
     if (!Array.isArray(out[key])) (out as unknown as Record<string, unknown>)[key] = [];
   }
+  out.schema = SCHEMA_VERSION;
   return out;
 }
 
@@ -127,7 +133,20 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   hydrate: async () => {
     const list = await dbGetAllProjects();
     const map: Record<string, Project> = {};
-    for (const p of list) map[p.id] = migrateProject(p);
+    // Ask the browser not to clear our storage under pressure.
+    try {
+      if (navigator.storage?.persist && !(await navigator.storage.persisted?.())) await navigator.storage.persist();
+    } catch {
+      /* not supported */
+    }
+    for (const p of list) {
+      const old = (p.schema ?? 1) < SCHEMA_VERSION;
+      // Keep the original before upgrading it, and a daily copy of every plan.
+      if (old) await backupProject(p, `Before upgrading from version ${p.schema ?? 1}`);
+      else if (Date.now() - (await lastBackupAt(p.id)) > DAY) await backupProject(p, 'Daily copy');
+      map[p.id] = migrateProject(p);
+      if (old) await dbPutProject(map[p.id]);
+    }
     let currentId = (await dbGetMeta<string>(CURRENT_KEY)) ?? null;
     if (list.length === 0) {
       const p = createEmptyProject('Untitled project');
@@ -174,6 +193,7 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   remove: (id) => {
     const { projects, currentId } = get();
     if (!projects[id]) return;
+    void backupProject(projects[id], 'Before delete');
     const rest = { ...projects };
     delete rest[id];
     let next = currentId === id ? null : currentId;
@@ -192,7 +212,9 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   },
 
   importProject: (p) => {
-    const incoming: Project = { ...migrateProject(p), updatedAt: Date.now() };
+    // Never overwrite a plan you already have: an import with the same id comes in as a copy.
+    const clash = !!get().projects[p.id];
+    const incoming: Project = { ...migrateProject(p), ...(clash ? { id: uid(), name: `${p.name} (imported)` } : {}), updatedAt: Date.now() };
     set((s) => ({ projects: { ...s.projects, [incoming.id]: incoming }, currentId: incoming.id }));
     void dbPutProject(incoming);
     void dbPutMeta(CURRENT_KEY, incoming.id);
@@ -236,6 +258,7 @@ function createEmptyProjectSafe(): Project {
     slate: emptySlate('Untitled project'),
     gear: [],
     connections: [],
+    schema: SCHEMA_VERSION,
   };
 }
 

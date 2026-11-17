@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { ArrowRight, ClipboardCheck, Download, Plus, Trash2, Cable } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, Download, Plus, Trash2, Cable, Wand2 } from 'lucide-react';
 import { PageHead } from '@/components/PageHead';
 import { Blueprint } from '@/components/Blueprint';
 import { Button } from '@/components/Button';
@@ -15,9 +15,12 @@ import { uid } from '@/lib/id';
 import { toCsv } from '@/lib/csv';
 import { downloadBlob, safeFilename } from '@/lib/download';
 import { CATEGORIES, CONNECTORS, SIGNALS, TEMPLATES, blankGear, cableFor, categoryInfo, gearFromTemplate, nextName } from '@/lib/gear/catalog';
-import { equipmentList } from '@/lib/gear/equipment';
+import { cableSummary, equipmentList } from '@/lib/gear/equipment';
 import type { Connector, GearCategory, GearItem, GearPort, SignalKind } from '@/types/project';
 import { ConnectSheet } from './ConnectSheet';
+import { AutoConnectSheet } from './AutoConnectSheet';
+import { check, checkProduction, portUsage, usedPorts } from '@/lib/gear/autoconnect';
+import '@/modules/cameras/cameras.css';
 import './gear.css';
 
 const SIGNAL_COLOUR: Record<SignalKind, string> = { audio: '#3f6fa0', video: '#e0ab00', timecode: '#7a7a7c', power: '#b3261e', data: '#4a4a4c', mount: '#0b0b0c' };
@@ -288,57 +291,128 @@ function Connections() {
   const project = useProject();
   const patch = useProjects((s) => s.patchCurrent);
   const [adding, setAdding] = useState(false);
+  const [auto, setAuto] = useState(false);
+  const [view, setView] = useState<'signal' | 'item'>('signal');
   const rows = project.connections.map((c) => {
     const fg = project.gear.find((g) => g.id === c.fromGear);
     const tg = project.gear.find((g) => g.id === c.toGear);
     const fp = fg?.ports.find((p) => p.id === c.fromPort);
     const tp = tg?.ports.find((p) => p.id === c.toPort);
-    return { c, fg, tg, fp, tp, cable: fp && tp ? cableFor(fp.connector, tp.connector) : null };
+    const ok = fg && tg && fp && tp ? check(fg, fp, tg, tp) : null;
+    return { c, fg, tg, fp, tp, ok, cable: fp && tp ? cableFor(fp.connector, tp.connector) : null };
   });
+  const issues = checkProduction(project.gear, project.connections);
+  const cables = cableSummary(project.gear, project.connections);
+  const ports = project.gear.reduce((a, g) => a + g.ports.length, 0);
+  const used = usedPorts(project.connections).size;
+  const missing = cables.reduce((a, c) => a + Math.max(0, c.need - c.owned), 0);
   function exportCsv() {
-    const out: (string | number)[][] = [['Signal', 'From', 'Output', 'To', 'Input', 'Cable', 'Notes']];
-    for (const r of rows) out.push([r.fp?.signal ?? '', r.fg?.name ?? '', r.fp ? `${r.fp.name} (${r.fp.connector})` : '', r.tg?.name ?? '', r.tp ? `${r.tp.name} (${r.tp.connector})` : '', r.cable ?? 'None', r.c.notes]);
+    const out: (string | number)[][] = [['Signal', 'From', 'Output', 'To', 'Input', 'Cable', 'Compatible', 'Notes']];
+    for (const r of rows) out.push([r.fp?.signal ?? '', r.fg?.name ?? '', r.fp ? `${r.fp.name} (${r.fp.connector})` : '', r.tg?.name ?? '', r.tp ? `${r.tp.name} (${r.tp.connector})` : '', r.cable ?? 'None', r.ok ? (r.ok.ok ? 'Yes' : `No: ${r.ok.reason}`) : 'Missing item', r.c.notes]);
     downloadBlob(new Blob([toCsv(out)], { type: 'text/csv;charset=utf-8' }), `${safeFilename(project.name)}-connections.csv`);
   }
+  const remove = (id: string) => patch((p) => ({ connections: p.connections.filter((x) => x.id !== id) }));
+  const setNotes = (id: string, notes: string) => patch((p) => ({ connections: p.connections.map((x) => (x.id === id ? { ...x, notes } : x)) }));
+  const row = ({ c, fg, tg, fp, tp, cable, ok }: (typeof rows)[number]) => (
+    <div key={c.id} className={`conn-row ${ok && !ok.ok ? 'is-bad' : ''}`}>
+      <span className="conn-flow">
+        <span className="signal-dot" style={{ background: SIGNAL_COLOUR[fp?.signal ?? 'data'] }} aria-hidden="true" />
+        <strong>{fg?.name ?? 'Missing item'}</strong>
+        <span className="mono">{fp?.name}</span>
+        <span aria-hidden="true">→</span>
+        <span className="visually-hidden">into</span>
+        <strong>{tg?.name ?? 'Missing item'}</strong>
+        <span className="mono">{tp?.name}</span>
+        <span className="tag">{fp?.signal === 'mount' ? 'Mounted' : cable ?? 'Wireless'}</span>
+        {ok && !ok.ok && <span className="tag tag--danger">Not compatible: {ok.reason}</span>}
+        <input className="input input--sm conn-notes" aria-label="Connection notes" placeholder="Notes" value={c.notes} onChange={(e) => setNotes(c.id, e.target.value)} />
+      </span>
+      <Button size="sm" variant="ghost" iconOnly icon={<Trash2 size={14} />} onClick={() => remove(c.id)}>
+        Remove connection
+      </Button>
+    </div>
+  );
   return (
     <div className="stack">
       <div className="cluster" style={{ justifyContent: 'space-between' }}>
-        <Button variant="primary" icon={<Cable size={16} />} onClick={() => setAdding(true)} disabled={project.gear.length < 2}>
-          Connect
-        </Button>
+        <div className="cluster">
+          <Button variant="primary" icon={<Wand2 size={16} />} onClick={() => setAuto(true)} disabled={project.gear.length < 2}>
+            Auto Connect everything
+          </Button>
+          <Button icon={<Cable size={16} />} onClick={() => setAdding(true)} disabled={project.gear.length < 2}>
+            Connect by hand
+          </Button>
+        </div>
         <Button size="sm" variant="quiet" icon={<Download size={14} />} onClick={exportCsv} disabled={!rows.length}>
           CSV
         </Button>
       </div>
-      {rows.length === 0 ? (
-        <EmptyState title="Nothing connected yet" body="Connect an output to an input, for example the boom mic into recorder input 1, or the camera's HDMI into a monitor. Lines appear on the plan and cables go on the equipment list." />
-      ) : (
-        SIGNALS.filter((s) => rows.some((r) => r.fp?.signal === s.id)).map((s) => (
-          <Blueprint key={s.id} title={s.label} index={String(rows.filter((r) => r.fp?.signal === s.id).length)}>
-            {rows
-              .filter((r) => r.fp?.signal === s.id)
-              .map(({ c, fg, tg, fp, tp, cable }) => (
-                <div key={c.id} className="conn-row">
-                  <span className="conn-flow">
-                    <span className="signal-dot" style={{ background: SIGNAL_COLOUR[s.id] }} aria-hidden="true" />
-                    <strong>{fg?.name}</strong>
-                    <span className="mono">{fp?.name}</span>
-                    <span aria-hidden="true">→</span>
-                    <span className="visually-hidden">into</span>
-                    <strong>{tg?.name}</strong>
-                    <span className="mono">{tp?.name}</span>
-                    <span className="tag">{cable ?? 'Wireless'}</span>
-                    {c.notes && <span className="tiny muted">{c.notes}</span>}
-                  </span>
-                  <Button size="sm" variant="ghost" iconOnly icon={<Trash2 size={14} />} onClick={() => patch((p) => ({ connections: p.connections.filter((x) => x.id !== c.id) }))}>
-                    Remove connection
-                  </Button>
-                </div>
+      <div className="readout-grid">
+        <div className="readout"><span className="readout__label">Connections</span><span className="readout__value readout__value--sm">{rows.length}</span></div>
+        <div className="readout"><span className="readout__label">Ports in use</span><span className="readout__value readout__value--sm">{used} / {ports}</span></div>
+        <div className="readout"><span className="readout__label">Cables to find</span><span className="readout__value readout__value--sm">{missing}</span></div>
+        <div className="readout"><span className="readout__label">Issues</span><span className="readout__value readout__value--sm">{issues.filter((i) => i.level !== 'info').length}</span></div>
+      </div>
+      {issues.length > 0 && (
+        <Blueprint title="Missing and incompatible" index="!">
+          <ul className="issue-list">
+            {issues.map((i, n) => (
+              <li key={n} className={`issue issue--${i.level}`}>{i.text}</li>
+            ))}
+          </ul>
+        </Blueprint>
+      )}
+      {cables.length > 0 && (
+        <Blueprint title="Cables needed" index="C">
+          <table className="table equip-table">
+            <thead>
+              <tr><th>Cable</th><th className="qty">Need</th><th className="qty">Have</th><th className="qty">Bring</th></tr>
+            </thead>
+            <tbody>
+              {cables.map((c) => (
+                <tr key={c.name}>
+                  <td>{c.name}</td>
+                  <td className="qty">{c.need}</td>
+                  <td className="qty">{c.owned}</td>
+                  <td className="qty">{c.need > c.owned ? <strong>{c.need - c.owned}</strong> : '0'}</td>
+                </tr>
               ))}
-          </Blueprint>
-        ))
+            </tbody>
+          </table>
+        </Blueprint>
+      )}
+      {rows.length === 0 ? (
+        <EmptyState title="Nothing connected yet" body="Use Auto Connect to join everything that fits, or connect an output to an input by hand, for example the boom mic into recorder input 1. Lines appear on the plan and cables go on the equipment list." />
+      ) : (
+        <>
+          <Tabs value={view} onChange={setView} label="Group connections" tabs={[{ id: 'signal', label: 'By signal' }, { id: 'item', label: 'By item' }]} />
+          {view === 'signal'
+            ? SIGNALS.filter((s) => rows.some((r) => r.fp?.signal === s.id)).map((s) => (
+                <Blueprint key={s.id} title={s.label} index={String(rows.filter((r) => r.fp?.signal === s.id).length)}>
+                  {rows.filter((r) => r.fp?.signal === s.id).map(row)}
+                </Blueprint>
+              ))
+            : project.gear
+                .filter((g) => g.ports.length)
+                .map((g) => {
+                  const usage = portUsage(g, project.gear, project.connections);
+                  return (
+                    <Blueprint key={g.id} title={g.name} index={`${usage.filter((u) => u.connection).length}/${g.ports.length}`}>
+                      <ul className="port-usage">
+                        {usage.map(({ port, other, otherPort }) => (
+                          <li key={port.id} className={other ? 'is-used' : ''}>
+                            <span className="mono">{port.dir === 'in' ? 'IN ' : 'OUT'}</span> {port.name} <span className="micro">{port.connector}{port.standard ? ` · ${port.standard}` : ''}</span>
+                            <span className="port-usage__to">{other ? `${other.name} · ${otherPort?.name}` : <span className="micro">free</span>}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Blueprint>
+                  );
+                })}
+        </>
       )}
       <ConnectSheet open={adding} onClose={() => setAdding(false)} />
+      <AutoConnectSheet open={auto} onClose={() => setAuto(false)} />
     </div>
   );
 }

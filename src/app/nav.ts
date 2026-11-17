@@ -49,7 +49,7 @@ export const TOOLS: Tool[] = [
 ];
 
 export const UTILITY_NAV = [
-  { id: 'projects', path: '/projects', name: 'Projects', icon: FolderOpen },
+  { id: 'projects', path: '/projects', name: 'My Production Plans', icon: FolderOpen },
   { id: 'settings', path: '/settings', name: 'Settings', icon: Settings },
 ];
 

@@ -632,6 +632,8 @@ export interface Project {
   slate: SlateState;
   gear: GearItem[];
   connections: Connection[];
+  /** Stored shape version; missing on plans saved before versioning. */
+  schema?: number;
 }
 
 export interface ProjectExport {
